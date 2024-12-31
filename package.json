@@ -1,0 +1,10 @@
+{
+  "name": "etika-blockchain-project",
+  "version": "1.0.0",
+  "description": "A blockchain-powered ecosystem for sustainable consumer-driven finance",
+  "scripts": {
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "author": "Abdelmalek33300",
+  "license": "MIT"
+}
