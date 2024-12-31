@@ -19,7 +19,8 @@ jobs:
           node-version: '18'
 
       - name: Install dependencies
-        run: npm install
+        run: cd chemin/vers/le/repertoire
+    npm install
 
       - name: Run tests
         run: npm test
