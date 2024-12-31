@@ -23,3 +23,5 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+Fix Install dependencies step in CI workflow
