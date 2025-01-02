@@ -4,9 +4,14 @@ on:
   push:
     branches:
       - main
+        Abdelmalek33300-patch-4
+
+      
+       - main
   pull_request:
     branches:
       - main
+      - Abdelmalek33300-patch-3
 
 
 jobs:
@@ -27,4 +32,3 @@ jobs:
 
       - name: Run tests
         run: npm test
-
