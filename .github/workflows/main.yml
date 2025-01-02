@@ -1,9 +1,14 @@
 name: CI Workflow
 
 on:
+  push:
+    branches:
+      - main
+      - Abdelmalek33300-patch-3
   pull_request:
     branches:
       - main
+      - Abdelmalek33300-patch-3
 
 jobs:
   build:
@@ -23,4 +28,3 @@ jobs:
 
       - name: Run tests
         run: npm test
-
