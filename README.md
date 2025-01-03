@@ -6,6 +6,7 @@ At its core, **Étika** aims to enable every citizen to monetize their decision-
 
 Using **blockchain technology**, Étika removes **financial intermediaries**, reduces costs, automates financial flows, and creates a **transparent and self-sustaining financial ecosystem**.
 
+
 ---
 
 ## 2. Value Proposition
