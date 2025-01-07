@@ -1,14 +1,24 @@
-# Contributing to Étika
 
-Thank you for your interest in contributing to Étika! 🚀  
-Your contributions are what make this project possible, and we value every effort, big or small. Please follow the guidelines below to ensure smooth collaboration.
+# 🚀 Contributing to Étika
 
-## 🛠️ Setting Up the Project
+Merci pour votre intérêt à contribuer au projet **Étika** ! 🚀  
+Chaque contribution compte et aide à faire avancer ce projet ambitieux. Veuillez suivre les instructions ci-dessous pour une collaboration efficace.
 
-1. **Fork the Repository**  
-   Click on the 'Fork' button at the top-right corner of this repository.
+---
 
-2. **Clone Your Fork Locally**  
+## 🛠️ **1. Configuration de l'Environnement de Développement**
+
+### Prérequis
+Assurez-vous d'avoir les outils suivants installés :
+- [Git](https://git-scm.com/)
+- [Node.js](https://nodejs.org/)
+- [Docker](https://www.docker.com/) *(optionnel, si applicable)*
+
+### Étapes de Configuration
+1. **Forkez le dépôt :**
+   - Cliquez sur le bouton `Fork` en haut à droite du dépôt.
+
+2. **Clonez votre fork en local :**
    ```bash
-   git clone https://github.com/YourUsername/Etika-Blockchain-Project.git
+   git clone https://github.com/<VotreNomUtilisateur>/Etika-Blockchain-Project.git
    cd Etika-Blockchain-Project
