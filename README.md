@@ -1,4 +1,14 @@
 # Étika – Empowering Citizens to Monetize Their Consumer Power for a Sustainable Future
+# Étika-Blockchain-Project
+
+## 📜 Étika Whitepaper
+
+The official Étika Whitepaper is available for download:
+
+📄 [Download the Whitepaper (PDF)](https://github.com/Abdelmalek33300/Etika-Blockchain-Project/blob/main/whitepaper-etika/whitepaper-étika.pdf)
+
+---
+
 
 ## 1. Project Description
 
