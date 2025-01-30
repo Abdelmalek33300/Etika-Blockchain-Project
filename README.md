@@ -5,9 +5,22 @@
 
 The official Étika Whitepaper is available for download:
 
-📄 [Download the Whitepaper (PDF)](https://github.com/Abdelmalek33300/Etika-Blockchain-Project/blob/main/whitepaper-etika/whitepaper-étika.pdf)
+
 
 ---
+## 📄 Whitepaper Étika - Versions Multilingues  
+
+🌍 Téléchargez le livre blanc dans votre langue :  
+
+| Langue          | Lien de téléchargement |
+|----------------|----------------------|
+| 🇬🇧 Anglais    | [Whitepaper EN](whitepaper-translations/whitepaper-etika-en.pdf) |
+| 🇫🇷 Français   | [Whitepaper FR](whitepaper-translations/whitepaper-etika-fr.pdf) |
+| 🇪🇸 Espagnol   | [Whitepaper ES](whitepaper-translations/whitepaper-etika-es.pdf) |
+| 🇦🇪 Arabe      | [Whitepaper AR](whitepaper-translations/whitepaper-etika-ar.pdf) |
+| 🇨🇳 Chinois    | [Whitepaper ZH](whitepaper-translations/whitepaper-etika-zh.pdf) |
+| 🇯🇵 Japonais   | [Whitepaper JA](whitepaper-translations/whitepaper-etika-ja.pdf) |
+| 🇵🇹 Portugais  | [Whitepaper PT](whitepaper-translations/whitepaper-etika-pt.pdf) |
 
 
 ## 1. Project Description
