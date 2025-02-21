@@ -2,7 +2,15 @@
   "name": "etika-blockchain-project",
   "version": "1.0.0",
   "description": "A blockchain-powered ecosystem for sustainable consumer-driven finance",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
+    "install:all": "npm install --workspaces",
+    "start:frontend": "npm run start --workspace=frontend",
+    "start:backend": "npm run start --workspace=backend",
     "test": "echo \"No tests specified\" && exit 0"
   },
   "author": "Abdelmalek33300",
