@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <!-- Background -->
+  <rect width="800" height="600" fill="#f8f9fa" />
+  
+  <!-- Title -->
+  <text x="400" y="40" font-family="Arial" font-size="20" text-anchor="middle" font-weight="bold">Architecture Évolutive du Dashboard d'Administration</text>
+  
+  <!-- Core Layer -->
+  <rect x="100" y="80" width="600" height="100" fill="#e3f2fd" stroke="#0d47a1" stroke-width="2" rx="5" />
+  <text x="400" y="100" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">Couche Core</text>
+  
+  <!-- Core Modules -->
+  <rect x="120" y="120" width="180" height="40" fill="#bbdefb" stroke="#1976d2" stroke-width="2" rx="5" />
+  <text x="210" y="145" font-family="Arial" font-size="14" text-anchor="middle">Service d'Authentification</text>
+  
+  <rect x="310" y="120" width="180" height="40" fill="#bbdefb" stroke="#1976d2" stroke-width="2" rx="5" />
+  <text x="400" y="145" font-family="Arial" font-size="14" text-anchor="middle">Service de Communication</text>
+  
+  <rect x="500" y="120" width="180" height="40" fill="#bbdefb" stroke="#1976d2" stroke-width="2" rx="5" />
+  <text x="590" y="145" font-family="Arial" font-size="14" text-anchor="middle">Service d'État Global</text>
+  
+  <!-- Feature Layer -->
+  <rect x="100" y="190" width="600" height="120" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2" rx="5" />
+  <text x="400" y="210" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">Couche Fonctionnelle (Extensible)</text>
+  
+  <!-- Feature Modules -->
+  <rect x="120" y="240" width="130" height="50" fill="#c8e6c9" stroke="#388e3c" stroke-width="2" rx="5" />
+  <text x="185" y="270" font-family="Arial" font-size="14" text-anchor="middle">Module Monitoring</text>
+  
+  <rect x="260" y="240" width="130" height="50" fill="#c8e6c9" stroke="#388e3c" stroke-width="2" rx="5" />
+  <text x="325" y="270" font-family="Arial" font-size="14" text-anchor="middle">Module Utilisateurs</text>
+  
+  <rect x="400" y="240" width="130" height="50" fill="#c8e6c9" stroke="#388e3c" stroke-width="2" rx="5" />
+  <text x="465" y="270" font-family="Arial" font-size="14" text-anchor="middle">Module Paramètres</text>
+  
+  <rect x="540" y="240" width="130" height="50" fill="#c8e6c9" stroke="#388e3c" stroke-width="2" rx="5" />
+  <text x="605" y="270" font-family="Arial" font-size="14" text-anchor="middle">Module Alertes</text>
+  
+  <!-- Dashed module for extension -->
+  <rect x="330" y="240" width="130" height="50" fill="none" stroke="#388e3c" stroke-width="2" rx="5" stroke-dasharray="5,3" />
+  <text x="395" y="270" font-family="Arial" font-size="14" text-anchor="middle" fill="#388e3c">Module Futur</text>
+  
+  <!-- UI Layer -->
+  <rect x="100" y="320" width="600" height="90" fill="#fff3e0" stroke="#e65100" stroke-width="2" rx="5" />
+  <text x="400" y="340" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">Couche UI (Composants Réutilisables)</text>
+  
+  <!-- UI Components -->
+  <rect x="120" y="360" width="80" height="30" fill="#ffe0b2" stroke="#f57c00" stroke-width="2" rx="5" />
+  <text x="160" y="380" font-family="Arial" font-size="12" text-anchor="middle">Tableaux</text>
+  
+  <rect x="210" y="360" width="80" height="30" fill="#ffe0b2" stroke="#f57c00" stroke-width="2" rx="5" />
+  <text x="250" y="380" font-family="Arial" font-size="12" text-anchor="middle">Graphiques</text>
+  
+  <rect x="300" y="360" width="80" height="30" fill="#ffe0b2" stroke="#f57c00" stroke-width="2" rx="5" />
+  <text x="340" y="380" font-family="Arial" font-size="12" text-anchor="middle">Formulaires</text>
+  
+  <rect x="390" y="360" width="80" height="30" fill="#ffe0b2" stroke="#f57c00" stroke-width="2" rx="5" />
+  <text x="430" y="380" font-family="Arial" font-size="12" text-anchor="middle">Modales</text>
+  
+  <rect x="480" y="360" width="80" height="30" fill="#ffe0b2" stroke="#f57c00" stroke-width="2" rx="5" />
+  <text x="520" y="380" font-family="Arial" font-size="12" text-anchor="middle">Filtres</text>
+  
+  <rect x="570" y="360" width="80" height="30" fill="#ffe0b2" stroke="#f57c00" stroke-width="2" rx="5" />
+  <text x="610" y="380" font-family="Arial" font-size="12" text-anchor="middle">Cartes</text>
+  
+  <!-- API Layer -->
+  <rect x="100" y="420" width="600" height="90" fill="#f3e5f5" stroke="#6a1b9a" stroke-width="2" rx="5" />
+  <text x="400" y="440" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">Couche API (Adaptateurs)</text>
+  
+  <!-- API Components -->
+  <rect x="120" y="460" width="120" height="30" fill="#e1bee7" stroke="#8e24aa" stroke-width="2" rx="5" />
+  <text x="180" y="480" font-family="Arial" font-size="12" text-anchor="middle">Adaptateur Core</text>
+  
+  <rect x="250" y="460" width="120" height="30" fill="#e1bee7" stroke="#8e24aa" stroke-width="2" rx="5" />
+  <text x="310" y="480" font-family="Arial" font-size="12" text-anchor="middle">Adaptateur Token</text>
+  
+  <rect x="380" y="460" width="120" height="30" fill="#e1bee7" stroke="#8e24aa" stroke-width="2" rx="5" />
+  <text x="440" y="480" font-family="Arial" font-size="12" text-anchor="middle">Adaptateur Utilisateur</text>
+  
+  <rect x="510" y="460" width="120" height="30" fill="#e1bee7" stroke="#8e24aa" stroke-width="2" rx="5" />
+  <text x="570" y="480" font-family="Arial" font-size="12" text-anchor="middle">Adaptateur Système</text>
+  
+  <!-- Extension System -->
+  <rect x="100" y="520" width="600" height="60" fill="#fce4ec" stroke="#c2185b" stroke-width="2" rx="5" />
+  <text x="400" y="550" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">Système d'Extension et Plugin (API pour modules tiers)</text>
+  
+  <!-- Connections between layers -->
+  <line x1="400" y1="180" x2="400" y2="190" stroke="#0d47a1" stroke-width="2" />
+  <line x1="400" y1="310" x2="400" y2="320" stroke="#2e7d32" stroke-width="2" />
+  <line x1="400" y1="410" x2="400" y2="420" stroke="#e65100" stroke-width="2" />
+  <line x1="400" y1="510" x2="400" y2="520" stroke="#6a1b9a" stroke-width="2" />
+</svg>
