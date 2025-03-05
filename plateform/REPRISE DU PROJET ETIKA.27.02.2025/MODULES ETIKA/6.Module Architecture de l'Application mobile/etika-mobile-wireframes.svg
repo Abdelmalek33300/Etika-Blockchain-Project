@@ -1,0 +1,256 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700">
+  <!-- Fond -->
+  <rect width="1000" height="700" fill="#f5f5f5"/>
+  
+  <!-- Titre -->
+  <text x="500" y="30" font-family="Arial" font-size="24" text-anchor="middle" font-weight="bold">Wireframes des Écrans Principaux - Application Étika Consommateur</text>
+  
+  <!-- Écran d'Accueil -->
+  <g transform="translate(50, 70)">
+    <!-- Cadre de l'écran -->
+    <rect width="200" height="400" rx="20" ry="20" fill="white" stroke="#333" stroke-width="2"/>
+    
+    <!-- Barre d'état -->
+    <rect width="200" height="20" rx="10" ry="10" fill="#e0e0e0"/>
+    
+    <!-- En-tête d'application -->
+    <rect y="20" width="200" height="40" fill="#4682B4"/>
+    <text x="100" y="45" font-family="Arial" font-size="16" text-anchor="middle" fill="white" font-weight="bold">Étika</text>
+    
+    <!-- Solde des tokens -->
+    <rect y="70" width="200" height="80" fill="#f9f9f9" stroke="#ddd" stroke-width="1"/>
+    <text x="20" y="90" font-family="Arial" font-size="12" fill="#555">Mes Tokens</text>
+    <text x="100" y="120" font-family="Arial" font-size="24" text-anchor="middle" font-weight="bold">158</text>
+    <text x="100" y="140" font-family="Arial" font-size="10" text-anchor="middle" fill="#777">32 en latence</text>
+    
+    <!-- Résumé épargne -->
+    <rect y="160" width="200" height="80" fill="#f9f9f9" stroke="#ddd" stroke-width="1"/>
+    <text x="20" y="180" font-family="Arial" font-size="12" fill="#555">Mon Épargne</text>
+    <text x="100" y="210" font-family="Arial" font-size="24" text-anchor="middle" font-weight="bold">523 €</text>
+    <line x1="40" y1="225" x2="160" y2="225" stroke="#4682B4" stroke-width="2"/>
+    <line x1="40" y1="225" x2="140" y2="225" stroke="#76A5C4" stroke-width="4"/>
+    
+    <!-- Transactions récentes -->
+    <rect y="250" width="200" height="150" fill="#f9f9f9" stroke="#ddd" stroke-width="1"/>
+    <text x="20" y="270" font-family="Arial" font-size="12" fill="#555">Transactions Récentes</text>
+    
+    <!-- Transaction 1 -->
+    <rect y="280" width="200" height="30" fill="#fff" stroke="#eee" stroke-width="1"/>
+    <text x="20" y="300" font-family="Arial" font-size="10">Carrefour</text>
+    <text x="180" y="300" font-family="Arial" font-size="10" text-anchor="end">+12</text>
+    
+    <!-- Transaction 2 -->
+    <rect y="310" width="200" height="30" fill="#fff" stroke="#eee" stroke-width="1"/>
+    <text x="20" y="330" font-family="Arial" font-size="10">Decathlon</text>
+    <text x="180" y="330" font-family="Arial" font-size="10" text-anchor="end">+8</text>
+    
+    <!-- Transaction 3 -->
+    <rect y="340" width="200" height="30" fill="#fff" stroke="#eee" stroke-width="1"/>
+    <text x="20" y="360" font-family="Arial" font-size="10">Bio Coop</text>
+    <text x="180" y="360" font-family="Arial" font-size="10" text-anchor="end">+5</text>
+    
+    <!-- Menu de navigation -->
+    <rect y="380" width="200" height="20" fill="#e0e0e0"/>
+    <circle cx="40" cy="390" r="7" fill="#4682B4"/>
+    <circle cx="100" cy="390" r="7" fill="#aaa"/>
+    <circle cx="160" cy="390" r="7" fill="#aaa"/>
+    
+    <!-- Titre de l'écran -->
+    <text x="100" y="-15" font-family="Arial" font-size="14" text-anchor="middle" font-weight="bold">Écran d'Accueil</text>
+  </g>
+  
+  <!-- Écran de Transaction/Scan -->
+  <g transform="translate(300, 70)">
+    <!-- Cadre de l'écran -->
+    <rect width="200" height="400" rx="20" ry="20" fill="white" stroke="#333" stroke-width="2"/>
+    
+    <!-- Barre d'état -->
+    <rect width="200" height="20" rx="10" ry="10" fill="#e0e0e0"/>
+    
+    <!-- En-tête d'application -->
+    <rect y="20" width="200" height="40" fill="#4682B4"/>
+    <text x="100" y="45" font-family="Arial" font-size="16" text-anchor="middle" fill="white" font-weight="bold">Scanner QR</text>
+    
+    <!-- Zone de scan -->
+    <rect y="70" width="200" height="200" fill="#000" fill-opacity="0.1"/>
+    <rect x="40" y="110" width="120" height="120" fill="none" stroke="#4682B4" stroke-width="2" stroke-dasharray="5,5"/>
+    <text x="100" y="250" font-family="Arial" font-size="12" text-anchor="middle" fill="#555">Placez le QR code dans le cadre</text>
+    
+    <!-- Bouton saisie manuelle -->
+    <rect x="40" y="285" width="120" height="30" rx="15" ry="15" fill="#f0f0f0" stroke="#ccc" stroke-width="1"/>
+    <text x="100" y="305" font-family="Arial" font-size="12" text-anchor="middle">Saisie manuelle</text>
+    
+    <!-- Instructions -->
+    <text x="100" y="340" font-family="Arial" font-size="10" text-anchor="middle" fill="#777">Scannez le QR code sur</text>
+    <text x="100" y="355" font-family="Arial" font-size="10" text-anchor="middle" fill="#777">votre ticket de caisse</text>
+    
+    <!-- Menu de navigation -->
+    <rect y="380" width="200" height="20" fill="#e0e0e0"/>
+    <circle cx="40" cy="390" r="7" fill="#aaa"/>
+    <circle cx="100" cy="390" r="7" fill="#4682B4"/>
+    <circle cx="160" cy="390" r="7" fill="#aaa"/>
+    
+    <!-- Titre de l'écran -->
+    <text x="100" y="-15" font-family="Arial" font-size="14" text-anchor="middle" font-weight="bold">Écran de Scan QR</text>
+  </g>
+  
+  <!-- Écran de Confirmation de Transaction -->
+  <g transform="translate(550, 70)">
+    <!-- Cadre de l'écran -->
+    <rect width="200" height="400" rx="20" ry="20" fill="white" stroke="#333" stroke-width="2"/>
+    
+    <!-- Barre d'état -->
+    <rect width="200" height="20" rx="10" ry="10" fill="#e0e0e0"/>
+    
+    <!-- En-tête d'application -->
+    <rect y="20" width="200" height="40" fill="#4682B4"/>
+    <text x="100" y="45" font-family="Arial" font-size="16" text-anchor="middle" fill="white" font-weight="bold">Confirmation</text>
+    
+    <!-- Détails de la transaction -->
+    <rect y="70" width="200" height="200" fill="#f9f9f9" stroke="#ddd" stroke-width="1"/>
+    
+    <!-- Commerçant -->
+    <text x="20" y="90" font-family="Arial" font-size="12" fill="#555">Commerçant:</text>
+    <text x="180" y="90" font-family="Arial" font-size="12" text-anchor="end" font-weight="bold">Carrefour</text>
+    
+    <!-- Date -->
+    <text x="20" y="115" font-family="Arial" font-size="12" fill="#555">Date:</text>
+    <text x="180" y="115" font-family="Arial" font-size="12" text-anchor="end">27/02/2025</text>
+    
+    <!-- Montant -->
+    <text x="20" y="140" font-family="Arial" font-size="12" fill="#555">Montant:</text>
+    <text x="180" y="140" font-family="Arial" font-size="14" text-anchor="end" font-weight="bold">78,50 €</text>
+    
+    <!-- Tokens -->
+    <text x="20" y="165" font-family="Arial" font-size="12" fill="#555">Tokens activés:</text>
+    <text x="180" y="165" font-family="Arial" font-size="14" text-anchor="end" font-weight="bold" fill="#4682B4">+12</text>
+    
+    <!-- Épargne -->
+    <text x="20" y="190" font-family="Arial" font-size="12" fill="#555">Épargne générée:</text>
+    <text x="180" y="190" font-family="Arial" font-size="14" text-anchor="end" font-weight="bold" fill="#4682B4">+1,57 €</text>
+    
+    <!-- Référence -->
+    <text x="20" y="215" font-family="Arial" font-size="10" fill="#777">Réf: ETK-78542369</text>
+    
+    <!-- Statut -->
+    <rect x="20" y="230" width="160" height="30" rx="5" ry="5" fill="#e6f7e6" stroke="#c3e6c3" stroke-width="1"/>
+    <text x="100" y="250" font-family="Arial" font-size="12" text-anchor="middle" fill="#2e8b57" font-weight="bold">Transaction validée</text>
+    
+    <!-- Boutons d'action -->
+    <rect x="20" y="280" width="160" height="40" rx="5" ry="5" fill="#4682B4" stroke="#3a6d8f" stroke-width="1"/>
+    <text x="100" y="305" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold">Retour à l'accueil</text>
+    
+    <rect x="20" y="330" width="160" height="30" rx="5" ry="5" fill="#f0f0f0" stroke="#ddd" stroke-width="1"/>
+    <text x="100" y="350" font-family="Arial" font-size="12" text-anchor="middle">Voir mes tokens</text>
+    
+    <!-- Menu de navigation -->
+    <rect y="380" width="200" height="20" fill="#e0e0e0"/>
+    <circle cx="40" cy="390" r="7" fill="#aaa"/>
+    <circle cx="100" cy="390" r="7" fill="#4682B4"/>
+    <circle cx="160" cy="390" r="7" fill="#aaa"/>
+    
+    <!-- Titre de l'écran -->
+    <text x="100" y="-15" font-family="Arial" font-size="14" text-anchor="middle" font-weight="bold">Confirmation Transaction</text>
+  </g>
+  
+  <!-- Écran de Gestion de l'Épargne -->
+  <g transform="translate(800, 70)">
+    <!-- Cadre de l'écran -->
+    <rect width="200" height="400" rx="20" ry="20" fill="white" stroke="#333" stroke-width="2"/>
+    
+    <!-- Barre d'état -->
+    <rect width="200" height="20" rx="10" ry="10" fill="#e0e0e0"/>
+    
+    <!-- En-tête d'application -->
+    <rect y="20" width="200" height="40" fill="#4682B4"/>
+    <text x="100" y="45" font-family="Arial" font-size="16" text-anchor="middle" fill="white" font-weight="bold">Mon Épargne</text>
+    
+    <!-- Total épargne -->
+    <rect y="70" width="200" height="60" fill="#f9f9f9" stroke="#ddd" stroke-width="1"/>
+    <text x="20" y="90" font-family="Arial" font-size="12" fill="#555">Total épargné:</text>
+    <text x="100" y="115" font-family="Arial" font-size="20" text-anchor="middle" font-weight="bold">523,00 €</text>
+    
+    <!-- Division épargne -->
+    <rect y="140" width="200" height="100" fill="#f9f9f9" stroke="#ddd" stroke-width="1"/>
+    
+    <!-- Long terme -->
+    <rect x="20" y="155" width="160" height="30" fill="#e6f7ff" stroke="#c2e0ff" stroke-width="1"/>
+    <text x="30" y="175" font-family="Arial" font-size="12">Long terme (80%)</text>
+    <text x="170" y="175" font-family="Arial" font-size="12" text-anchor="end" font-weight="bold">418,40 €</text>
+    
+    <!-- Projets -->
+    <rect x="20" y="195" width="160" height="30" fill="#fff0e6" stroke="#ffd9c2" stroke-width="1"/>
+    <text x="30" y="215" font-family="Arial" font-size="12">Projets (20%)</text>
+    <text x="170" y="215" font-family="Arial" font-size="12" text-anchor="end" font-weight="bold">104,60 €</text>
+    
+    <!-- Graphique -->
+    <rect y="250" width="200" height="120" fill="#f9f9f9" stroke="#ddd" stroke-width="1"/>
+    <text x="20" y="270" font-family="Arial" font-size="12" fill="#555">Évolution sur 6 mois</text>
+    
+    <!-- Graphique simplifié -->
+    <polyline points="30,350 60,340 90,320 120,315 150,300 180,280" fill="none" stroke="#4682B4" stroke-width="2"/>
+    <circle cx="30" cy="350" r="3" fill="#4682B4"/>
+    <circle cx="60" cy="340" r="3" fill="#4682B4"/>
+    <circle cx="90" cy="320" r="3" fill="#4682B4"/>
+    <circle cx="120" cy="315" r="3" fill="#4682B4"/>
+    <circle cx="150" cy="300" r="3" fill="#4682B4"/>
+    <circle cx="180" cy="280" r="3" fill="#4682B4"/>
+    
+    <!-- Menu de navigation -->
+    <rect y="380" width="200" height="20" fill="#e0e0e0"/>
+    <circle cx="40" cy="390" r="7" fill="#aaa"/>
+    <circle cx="100" cy="390" r="7" fill="#aaa"/>
+    <circle cx="160" cy="390" r="7" fill="#4682B4"/>
+    
+    <!-- Titre de l'écran -->
+    <text x="100" y="-15" font-family="Arial" font-size="14" text-anchor="middle" font-weight="bold">Écran de Gestion d'Épargne</text>
+  </g>
+  
+  <!-- Annotation du flux -->
+  <g>
+    <!-- Flèches de flux -->
+    <defs>
+      <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#555"/>
+      </marker>
+    </defs>
+    
+    <!-- Accueil → Scan -->
+    <line x1="250" y1="220" x2="300" y2="220" stroke="#555" stroke-width="2" marker-end="url(#arrowhead)"/>
+    
+    <!-- Scan → Confirmation -->
+    <line x1="500" y1="220" x2="550" y2="220" stroke="#555" stroke-width="2" marker-end="url(#arrowhead)"/>
+    
+    <!-- Confirmation → Accueil -->
+    <path d="M 650 350 C 550 400 250 400 150 350" stroke="#555" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+    
+    <!-- Accueil → Épargne -->
+    <line x1="150" y1="200" x2="800" y2="200" stroke="#555" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
+  </g>
+  
+  <!-- Légende -->
+  <g transform="translate(50, 500)">
+    <rect width="900" height="80" fill="white" stroke="#ddd" stroke-width="1"/>
+    <text x="20" y="30" font-family="Arial" font-size="16" font-weight="bold">Légende :</text>
+    
+    <line x1="20" y1="50" x2="100" y2="50" stroke="#555" stroke-width="2" marker-end="url(#arrowhead)"/>
+    <text x="110" y="55" font-family="Arial" font-size="14">Flux principal</text>
+    
+    <line x1="250" y1="50" x2="330" y2="50" stroke="#555" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
+    <text x="340" y="55" font-family="Arial" font-size="14">Navigation secondaire</text>
+    
+    <rect x="500" y="40" width="20" height="20" fill="#4682B4"/>
+    <text x="530" y="55" font-family="Arial" font-size="14">Interface principale</text>
+    
+    <rect x="650" y="40" width="20" height="20" fill="#e6f7e6" stroke="#c3e6c3" stroke-width="1"/>
+    <text x="680" y="55" font-family="Arial" font-size="14">Confirmation/Succès</text>
+  </g>
+  
+  <!-- Notes explicatives -->
+  <g transform="translate(50, 600)">
+    <rect width="900" height="80" fill="white" stroke="#ddd" stroke-width="1"/>
+    <text x="20" y="30" font-family="Arial" font-size="16" font-weight="bold">Notes de conception :</text>
+    
+    <text x="20" y="55" font-family="Arial" font-size="14">1. L'interface utilisateur est conçue pour être intuitive, avec un focus sur les fonctionnalités essentielles.</text>
+    <text x="20" y="75" font-family="Arial" font-size="14">2. Le flux principal (Accueil → Scan → Confirmation) est optimisé pour être rapide et sans friction.</text>
+  </g>

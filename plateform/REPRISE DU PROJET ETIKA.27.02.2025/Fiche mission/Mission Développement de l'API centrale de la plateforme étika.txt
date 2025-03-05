@@ -1,0 +1,25 @@
+Mission: Développement de l'API centrale de la plateforme Étika
+
+Module concerné: etika-platform-api
+
+Contexte: Création de l'API qui servira de ciment entre tous les modules de l'écosystème Étika
+
+Objectifs de la session:
+1. Définir l'architecture de l'API REST
+2. Spécifier les endpoints pour l'interaction avec le token-system
+3. Spécifier les endpoints pour l'interaction avec le pop-consensus
+4. Créer les structures de données pour les requêtes/réponses
+
+Livrables attendus:
+- Spécification OpenAPI (Swagger)
+- Code Rust de l'API (structure de base)
+- Documentation des endpoints
+
+Contraintes techniques:
+- API REST conforme aux standards HTTP
+- Utilisation de Rust avec framework Actix ou similaire
+- Authentication JWT
+
+Dépendances avec autres modules:
+- etika-token-system
+- etika-pop-consensus

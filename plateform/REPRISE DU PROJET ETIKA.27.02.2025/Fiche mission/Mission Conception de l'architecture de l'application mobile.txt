@@ -1,0 +1,24 @@
+Mission: Conception de l'architecture de l'application mobile consommateur
+
+Module concerné: etika-mobile-app
+
+Contexte: Développement de l'application mobile qui permettra aux consommateurs d'interagir avec l'écosystème Étika
+
+Objectifs de la session:
+1. Définir l'architecture technique de l'application
+2. Spécifier les écrans principaux et le flux utilisateur
+3. Détailler l'intégration avec l'API de la plateforme
+4. Concevoir le système de scan QR pour les transactions
+
+Livrables attendus:
+- Architecture technique de l'application
+- Wireframes des écrans principaux
+- Plan d'intégration avec l'API
+
+Contraintes techniques:
+- Application cross-platform (React Native ou Flutter)
+- Support offline pour certaines fonctionnalités
+- Sécurisation des clés privées sur le device
+
+Dépendances avec autres modules:
+- etika-platform-api

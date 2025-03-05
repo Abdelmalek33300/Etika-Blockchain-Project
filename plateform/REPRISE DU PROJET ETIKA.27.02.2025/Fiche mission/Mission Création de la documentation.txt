@@ -1,0 +1,25 @@
+Mission: Création de la documentation utilisateur pour les consommateurs
+
+Module concerné: etika-user-documentation
+
+Contexte: Développement de guides complets et accessibles pour aider les consommateurs à comprendre et utiliser l'écosystème Étika
+
+Objectifs de la session:
+1. Créer un guide de démarrage pour les nouveaux utilisateurs
+2. Développer des tutoriels étape par étape pour chaque fonctionnalité clé
+3. Rédiger des FAQ basées sur les questions anticipées
+4. Concevoir des infographies explicatives du système
+
+Livrables attendus:
+- Guide de démarrage en format Markdown
+- Tutoriels avec captures d'écran
+- FAQ complète
+- Fichiers source pour les infographies
+
+Contraintes techniques:
+- Documentation au format Markdown pour faciliter la conversion en différents formats
+- Langage simple et accessible (niveau B1/B2)
+- Structure modulaire permettant une mise à jour facile
+
+Dépendances avec autres modules:
+- etika-mobile-app (captures d'écran et descriptions fonctionnelles)
