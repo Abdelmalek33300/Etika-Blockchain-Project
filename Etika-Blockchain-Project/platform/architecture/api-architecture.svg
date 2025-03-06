@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600">
+  <!-- Background -->
+  <rect width="1000" height="600" fill="#f8f9fa" />
+  
+  <!-- Title -->
+  <text x="500" y="40" font-family="Arial" font-size="24" text-anchor="middle" font-weight="bold">Architecture de l'API Centrale Étika</text>
+  
+  <!-- API Gateway Box -->
+  <rect x="420" y="80" width="160" height="80" fill="#bbdefb" stroke="#1976d2" stroke-width="2" rx="5" />
+  <text x="500" y="125" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">API Gateway</text>
+
+  <!-- Controllers Layer -->
+  <rect x="50" y="200" width="900" height="80" fill="#e3f2fd" stroke="#0d47a1" stroke-width="2" rx="5" />
+  <text x="500" y="225" font-family="Arial" font-size="18" text-anchor="middle" font-weight="bold">Controllers Layer</text>
+  
+  <!-- Auth Controller -->
+  <rect x="100" y="240" width="140" height="30" fill="#bbdefb" stroke="#1976d2" stroke-width="1" rx="5" />
+  <text x="170" y="260" font-family="Arial" font-size="14" text-anchor="middle">Auth Controller</text>
+  
+  <!-- Token Controller -->
+  <rect x="250" y="240" width="140" height="30" fill="#bbdefb" stroke="#1976d2" stroke-width="1" rx="5" />
+  <text x="320" y="260" font-family="Arial" font-size="14" text-anchor="middle">Token Controller</text>
+  
+  <!-- PoP Controller -->
+  <rect x="400" y="240" width="140" height="30" fill="#bbdefb" stroke="#1976d2" stroke-width="1" rx="5" />
+  <text x="470" y="260" font-family="Arial" font-size="14" text-anchor="middle">PoP Controller</text>
+  
+  <!-- User Controller -->
+  <rect x="550" y="240" width="140" height="30" fill="#bbdefb" stroke="#1976d2" stroke-width="1" rx="5" />
+  <text x="620" y="260" font-family="Arial" font-size="14" text-anchor="middle">User Controller</text>
+  
+  <!-- Admin Controller -->
+  <rect x="700" y="240" width="140" height="30" fill="#bbdefb" stroke="#1976d2" stroke-width="1" rx="5" />
+  <text x="770" y="260" font-family="Arial" font-size="14" text-anchor="middle">Admin Controller</text>
+  
+  <!-- Services Layer -->
+  <rect x="50" y="300" width="900" height="80" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2" rx="5" />
+  <text x="500" y="325" font-family="Arial" font-size="18" text-anchor="middle" font-weight="bold">Services Layer</text>
+  
+  <!-- Auth Service -->
+  <rect x="100" y="340" width="140" height="30" fill="#c8e6c9" stroke="#388e3c" stroke-width="1" rx="5" />
+  <text x="170" y="360" font-family="Arial" font-size="14" text-anchor="middle">Auth Service</text>
+  
+  <!-- Token Service -->
+  <rect x="250" y="340" width="140" height="30" fill="#c8e6c9" stroke="#388e3c" stroke-width="1" rx="5" />
+  <text x="320" y="360" font-family="Arial" font-size="14" text-anchor="middle">Token Service</text>
+  
+  <!-- PoP Service -->
+  <rect x="400" y="340" width="140" height="30" fill="#c8e6c9" stroke="#388e3c" stroke-width="1" rx="5" />
+  <text x="470" y="360" font-family="Arial" font-size="14" text-anchor="middle">PoP Service</text>
+  
+  <!-- User Service -->
+  <rect x="550" y="340" width="140" height="30" fill="#c8e6c9" stroke="#388e3c" stroke-width="1" rx="5" />
+  <text x="620" y="360" font-family="Arial" font-size="14" text-anchor="middle">User Service</text>
+  
+  <!-- Admin Service -->
+  <rect x="700" y="340" width="140" height="30" fill="#c8e6c9" stroke="#388e3c" stroke-width="1" rx="5" />
+  <text x="770" y="360" font-family="Arial" font-size="14" text-anchor="middle">Admin Service</text>
+  
+  <!-- Core Modules Integration Layer -->
+  <rect x="50" y="400" width="900" height="80" fill="#fff3e0" stroke="#e65100" stroke-width="2" rx="5" />
+  <text x="500" y="425" font-family="Arial" font-size="18" text-anchor="middle" font-weight="bold">Core Modules Integration Layer</text>
+  
+  <!-- etika-token-system -->
+  <rect x="100" y="440" width="160" height="30" fill="#ffe0b2" stroke="#f57c00" stroke-width="1" rx="5" />
+  <text x="180" y="460" font-family="Arial" font-size="14" text-anchor="middle">etika-token-system</text>
+  
+  <!-- etika-pop-consensus -->
+  <rect x="280" y="440" width="160" height="30" fill="#ffe0b2" stroke="#f57c00" stroke-width="1" rx="5" />
+  <text x="360" y="460" font-family="Arial" font-size="14" text-anchor="middle">etika-pop-consensus</text>
+  
+  <!-- etika-blockchain-core -->
+  <rect x="460" y="440" width="160" height="30" fill="#ffe0b2" stroke="#f57c00" stroke-width="1" rx="5" />
+  <text x="540" y="460" font-family="Arial" font-size="14" text-anchor="middle">etika-blockchain-core</text>
+  
+  <!-- etika-data-structure -->
+  <rect x="640" y="440" width="160" height="30" fill="#ffe0b2" stroke="#f57c00" stroke-width="1" rx="5" />
+  <text x="720" y="460" font-family="Arial" font-size="14" text-anchor="middle">etika-data-structure</text>
+  
+  <!-- Other Modules Layer -->
+  <rect x="50" y="500" width="900" height="80" fill="#f3e5f5" stroke="#6a1b9a" stroke-width="2" rx="5" />
+  <text x="500" y="525" font-family="Arial" font-size="18" text-anchor="middle" font-weight="bold">Other Modules Layer</text>
+  
+  <!-- etika-consumer-fund -->
+  <rect x="100" y="540" width="140" height="30" fill="#e1bee7" stroke="#8e24aa" stroke-width="1" rx="5" />
+  <text x="170" y="560" font-family="Arial" font-size="14" text-anchor="middle">etika-consumer-fund</text>
+  
+  <!-- etika-factoring-system -->
+  <rect x="250" y="540" width="140" height="30" fill="#e1bee7" stroke="#8e24aa" stroke-width="1" rx="5" />
+  <text x="320" y="560" font-family="Arial" font-size="14" text-anchor="middle">etika-factoring-system</text>
+  
+  <!-- etika-auction-system -->
+  <rect x="400" y="540" width="140" height="30" fill="#e1bee7" stroke="#8e24aa" stroke-width="1" rx="5" />
+  <text x="470" y="560" font-family="Arial" font-size="14" text-anchor="middle">etika-auction-system</text>
+  
+  <!-- etika-marketplace -->
+  <rect x="550" y="540" width="140" height="30" fill="#e1bee7" stroke="#8e24aa" stroke-width="1" rx="5" />
+  <text x="620" y="560" font-family="Arial" font-size="14" text-anchor="middle">etika-marketplace</text>
+  
+  <!-- etika-admin-tools -->
+  <rect x="700" y="540" width="140" height="30" fill="#e1bee7" stroke="#8e24aa" stroke-width="1" rx="5" />
+  <text x="770" y="560" font-family="Arial" font-size="14" text-anchor="middle">etika-admin-tools</text>
+  
+  <!-- Connections -->
+  <!-- Applications to Gateway -->
+  <line x1="500" y1="80" x2="500" y2="65" stroke="#1976d2" stroke-width="2" />
+  <polygon points="500,60 495,70 505,70" fill="#1976d2" />
+  <text x="525" y="70" font-family="Arial" font-size="10">Clients</text>
+  
+  <!-- Gateway to Controllers -->
+  <line x1="500" y1="160" x2="500" y2="200" stroke="#1976d2" stroke-width="2" />
+  <polygon points="500,200 495,190 505,190" fill="#1976d2" />
+  
+  <!-- Controllers to Services -->
+  <line x1="170" y1="270" x2="170" y2="340" stroke="#1976d2" stroke-width="2" />
+  <polygon points="170,340 165,330 175,330" fill="#1976d2" />
+  
+  <line x1="320" y1="270" x2="320" y2="340" stroke="#1976d2" stroke-width="2" />
+  <polygon points="320,340 315,330 325,330" fill="#1976d2" />
+  
+  <line x1="470" y1="270" x2="470" y2="340" stroke="#1976d2" stroke-width="2" />
+  <polygon points="470,340 465,330 475,330" fill="#1976d2" />
+  
+  <line x1="620" y1="270" x2="620" y2="340" stroke="#1976d2" stroke-width="2" />
+  <polygon points="620,340 615,330 625,330" fill="#1976d2" />
+  
+  <line x1="770" y1="270" x2="770" y2="340" stroke="#1976d2" stroke-width="2" />
+  <polygon points="770,340 765,330 775,330" fill="#1976d2" />
+  
+  <!-- Services to Core Modules -->
+  <line x1="170" y1="370" x2="170" y2="440" stroke="#388e3c" stroke-width="2" />
+  <polygon points="170,440 165,430 175,430" fill="#388e3c" />
+  
+  <line x1="320" y1="370" x2="180" y2="440" stroke="#388e3c" stroke-width="2" />
+  <polygon points="180,440 185,430 190,435" fill="#388e3c" />
+  
+  <line x1="470" y1="370" x2="360" y2="440" stroke="#388e3c" stroke-width="2" />
+  <polygon points="360,440 365,430 370,435" fill="#388e3c" />
+  
+  <line x1="620" y1="370" x2="540" y2="440" stroke="#388e3c" stroke-width="2" />
+  <polygon points="540,440 545,430 550,435" fill="#388e3c" />
+  
+  <line x1="770" y1="370" x2="720" y2="440" stroke="#388e3c" stroke-width="2" />
+  <polygon points="720,440 725,430 730,435" fill="#388e3c" />
+  
+  <!-- Core Modules to Other Modules -->
+  <line x1="180" y1="470" x2="170" y2="540" stroke="#f57c00" stroke-width="2" />
+  <polygon points="170,540 165,530 175,530" fill="#f57c00" />
+  
+  <line x1="360" y1="470" x2="320" y2="540" stroke="#f57c00" stroke-width="2" />
+  <polygon points="320,540 315,530 325,530" fill="#f57c00" />
+  
+  <line x1="540" y1="470" x2="470" y2="540" stroke="#f57c00" stroke-width="2" />
+  <polygon points="470,540 465,530 475,530" fill="#f57c00" />
+  
+  <line x1="720" y1="470" x2="620" y2="540" stroke="#f57c00" stroke-width="2" />
+  <polygon points="620,540 615,530 625,530" fill="#f57c00" />
+  
+  <line x1="720" y1="470" x2="770" y2="540" stroke="#f57c00" stroke-width="2" />
+  <polygon points="770,540 765,530 775,530" fill="#f57c00" />
+</svg>

@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 750">
+  <!-- Background -->
+  <rect width="1000" height="750" fill="#f8f9fa" />
+  
+  <!-- Title -->
+  <text x="500" y="40" font-family="Arial" font-size="24" text-anchor="middle" font-weight="bold">Architecture d'intégration etika-payment-integration</text>
+  
+  <!-- Main Module Box -->
+  <rect x="50" y="80" width="900" height="650" fill="#e3f2fd" stroke="#0d47a1" stroke-width="2" rx="5" />
+  <text x="500" y="110" font-family="Arial" font-size="20" text-anchor="middle" font-weight="bold">etika-payment-integration</text>
+  
+  <!-- Internal Components -->
+  
+  <!-- API Gateway -->
+  <rect x="100" y="140" width="800" height="100" fill="#bbdefb" stroke="#1976d2" stroke-width="2" rx="5" />
+  <text x="500" y="170" font-family="Arial" font-size="18" text-anchor="middle" font-weight="bold">API Gateway de Paiement</text>
+  <text x="500" y="200" font-family="Arial" font-size="14" text-anchor="middle">Interface unifiée pour les différents réseaux de paiement</text>
+  
+  <!-- Payment Connectors -->
+  <rect x="100" y="270" width="250" height="120" fill="#c8e6c9" stroke="#388e3c" stroke-width="2" rx="5" />
+  <text x="225" y="300" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">Connecteurs Visa</text>
+  <text x="225" y="325" font-family="Arial" font-size="14" text-anchor="middle">Intégration API Visa</text>
+  <text x="225" y="350" font-family="Arial" font-size="14" text-anchor="middle">Conformité PCI-DSS</text>
+  
+  <rect x="375" y="270" width="250" height="120" fill="#c8e6c9" stroke="#388e3c" stroke-width="2" rx="5" />
+  <text x="500" y="300" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">Connecteurs Mastercard</text>
+  <text x="500" y="325" font-family="Arial" font-size="14" text-anchor="middle">Intégration API Mastercard</text>
+  <text x="500" y="350" font-family="Arial" font-size="14" text-anchor="middle">Conformité PCI-DSS</text>
+  
+  <rect x="650" y="270" width="250" height="120" fill="#c8e6c9" stroke="#388e3c" stroke-width="2" rx="5" />
+  <text x="775" y="300" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">Connecteurs Autres</text>
+  <text x="775" y="325" font-family="Arial" font-size="14" text-anchor="middle">Réseau CB, Amex, etc.</text>
+  <text x="775" y="350" font-family="Arial" font-size="14" text-anchor="middle">Protocoles extensibles</text>
+  
+  <!-- Transaction Manager -->
+  <rect x="100" y="420" width="800" height="100" fill="#ffe0b2" stroke="#f57c00" stroke-width="2" rx="5" />
+  <text x="500" y="450" font-family="Arial" font-size="18" text-anchor="middle" font-weight="bold">Gestionnaire de Transactions</text>
+  <text x="500" y="480" font-family="Arial" font-size="14" text-anchor="middle">Synchronisation et coordination des transactions standards et blockchain (PoP)</text>
+  
+  <!-- Fallback & Recovery -->
+  <rect x="100" y="550" width="385" height="100" fill="#ffccbc" stroke="#e64a19" stroke-width="2" rx="5" />
+  <text x="292" y="580" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">Système de Fallback</text>
+  <text x="292" y="610" font-family="Arial" font-size="14" text-anchor="middle">Gestion des situations d'échec</text>
+  
+  <!-- Security & Audit -->
+  <rect x="515" y="550" width="385" height="100" fill="#d1c4e9" stroke="#512da8" stroke-width="2" rx="5" />
+  <text x="707" y="580" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold">Sécurité et Audit</text>
+  <text x="707" y="610" font-family="Arial" font-size="14" text-anchor="middle">Journalisation et conformité</text>
+  
+  <!-- External Systems -->
+  
+  <!-- Payment Networks -->
+  <rect x="50" y="700" width="200" height="30" fill="#b39ddb" stroke="#673ab7" stroke-width="2" rx="5" />
+  <text x="150" y="720" font-family="Arial" font-size="14" text-anchor="middle">Réseaux de Paiement</text>
+  
+  <!-- etika-platform-api -->
+  <rect x="275" y="700" width="200" height="30" fill="#b39ddb" stroke="#673ab7" stroke-width="2" rx="5" />
+  <text x="375" y="720" font-family="Arial" font-size="14" text-anchor="middle">etika-platform-api</text>
+  
+  <!-- etika-pop-consensus -->
+  <rect x="500" y="700" width="200" height="30" fill="#b39ddb" stroke="#673ab7" stroke-width="2" rx="5" />
+  <text x="600" y="720" font-family="Arial" font-size="14" text-anchor="middle">etika-pop-consensus</text>
+  
+  <!-- etika-token-system -->
+  <rect x="725" y="700" width="200" height="30" fill="#b39ddb" stroke="#673ab7" stroke-width="2" rx="5" />
+  <text x="825" y="720" font-family="Arial" font-size="14" text-anchor="middle">etika-token-system</text>
+  
+  <!-- Connections and Arrows -->
+  
+  <!-- Internal connections -->
+  <path d="M500,240 L500,270" stroke="#1976d2" stroke-width="2" marker-end="url(#arrowhead)" />
+  
+  <path d="M225,390 L225,420" stroke="#388e3c" stroke-width="2" marker-end="url(#arrowhead)" />
+  <path d="M500,390 L500,420" stroke="#388e3c" stroke-width="2" marker-end="url(#arrowhead)" />
+  <path d="M775,390 L775,420" stroke="#388e3c" stroke-width="2" marker-end="url(#arrowhead)" />
+  
+  <path d="M500,520 L292,550" stroke="#f57c00" stroke-width="2" marker-end="url(#arrowhead)" />
+  <path d="M500,520 L707,550" stroke="#f57c00" stroke-width="2" marker-end="url(#arrowhead)" />
+  
+  <!-- External connections -->
+  <path d="M150,680 L150,700" stroke="#673ab7" stroke-width="2" marker-end="url(#arrowhead)" />
+  <path d="M375,680 L375,700" stroke="#673ab7" stroke-width="2" marker-end="url(#arrowhead)" />
+  <path d="M600,680 L600,700" stroke="#673ab7" stroke-width="2" marker-end="url(#arrowhead)" />
+  <path d="M825,680 L825,700" stroke="#673ab7" stroke-width="2" marker-end="url(#arrowhead)" />
+  
+  <!-- Arrowhead definition -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" />
+    </marker>
+  </defs>
+  
+  <!-- Bidirectional arrows -->
+  <path d="M225,270 L225,240 L500,240" stroke="#1976d2" stroke-width="2" fill="none" />
+  <path d="M775,270 L775,240 L500,240" stroke="#1976d2" stroke-width="2" fill="none" />
+  
+  <!-- Legend -->
+  <rect x="750" y="70" width="15" height="15" fill="#bbdefb" stroke="#1976d2" stroke-width="2" />
+  <text x="770" y="83" font-family="Arial" font-size="12">Interface</text>
+  
+  <rect x="750" y="90" width="15" height="15" fill="#c8e6c9" stroke="#388e3c" stroke-width="2" />
+  <text x="770" y="103" font-family="Arial" font-size="12">Connecteurs</text>
+  
+  <rect x="850" y="70" width="15" height="15" fill="#ffe0b2" stroke="#f57c00" stroke-width="2" />
+  <text x="870" y="83" font-family="Arial" font-size="12">Transaction</text>
+  
+  <rect x="850" y="90" width="15" height="15" fill="#ffccbc" stroke="#e64a19" stroke-width="2" />
+  <text x="870" y="103" font-family="Arial" font-size="12">Fallback</text>
+</svg>
