@@ -1,0 +1,844 @@
+// auctionFinalizationService.js
+// Module de finalisation des enchères Étika avec gestion robuste du processus et des cas d'erreur
+
+const { mongoose } = require('mongoose');
+const { EventEmitter } = require('events');
+const logger = require('../utils/logger');
+
+/**
+ * Service de finalisation des enchères
+ * Gère le processus complet de finalisation, y compris:
+ * - Détection automatique des enchères terminées
+ * - Vérification de la solvabilité du gagnant
+ * - Traitement des paiements
+ * - Transfert des récompenses
+ * - Gestion des cas d'erreur
+ */
+class AuctionFinalizationService {
+  constructor(
+    dbProvider,
+    paymentService,
+    rewardService,
+    notificationService,
+    consumerFundService,
+    adminService
+  ) {
+    this.db = dbProvider;
+    this.paymentService = paymentService;
+    this.rewardService = rewardService;
+    this.notificationService = notificationService;
+    this.consumerFundService = consumerFundService;
+    this.adminService = adminService;
+    this.events = new EventEmitter();
+    
+    // États possibles de finalisation
+    this.FinalizationState = {
+      PENDING: 'pending',           // En attente de finalisation
+      PAYMENT_PENDING: 'payment_pending', // Paiement en attente
+      PAYMENT_FAILED: 'payment_failed',   // Échec du paiement
+      PAYMENT_SUCCESSFUL: 'payment_successful', // Paiement réussi
+      REWARDS_TRANSFERRED: 'rewards_transferred', // Récompenses transférées
+      COMPLETED: 'completed',       // Finalisation complète
+      FAILED: 'failed',             // Échec de finalisation (aucune enchère)
+      ERROR: 'error',               // Erreur technique
+      DISPUTE: 'dispute',           // Litige en cours
+      ADMIN_REVIEW: 'admin_review'  // Révision administrative nécessaire
+    };
+    
+    // Délais de timeout pour différentes étapes (en millisecondes)
+    this.timeouts = {
+      PAYMENT: 24 * 60 * 60 * 1000, // 24h pour le paiement
+      ADMIN_INTERVENTION: 48 * 60 * 60 * 1000, // 48h pour intervention admin
+      AUTO_RETRY: 1 * 60 * 60 * 1000 // 1h entre les tentatives automatiques
+    };
+  }
+
+  /**
+   * Détecte et finalise les enchères qui sont terminées
+   * Exécuté régulièrement par un job planifié (cron)
+   * @returns {Promise<{success: number, failed: number, error: number}>} Statistiques de finalisation
+   */
+  async detectAndFinalizeEndedAuctions() {
+    const stats = { success: 0, failed: 0, error: 0 };
+    const now = new Date();
+    
+    try {
+      // Trouver toutes les enchères actives dont la date de fin est passée
+      const endedAuctions = await this.db.auctions.find({
+        status: 'active',
+        endTime: { $lte: now }
+      }).toArray();
+      
+      logger.info(`Detected ${endedAuctions.length} ended auctions to finalize`);
+      
+      // Finaliser chaque enchère
+      for (const auction of endedAuctions) {
+        try {
+          await this.startFinalization(auction._id);
+          stats.success++;
+        } catch (error) {
+          logger.error(`Failed to finalize auction ${auction._id}:`, error);
+          stats.failed++;
+        }
+      }
+      
+      // Reprendre les tentatives de finalisation pour les enchères en attente de paiement
+      // dont le délai est dépassé
+      const paymentDeadline = new Date(now.getTime() - this.timeouts.PAYMENT);
+      
+      const paymentTimedOutAuctions = await this.db.auctions.find({
+        status: 'payment_pending',
+        'finalization.updatedAt': { $lte: paymentDeadline }
+      }).toArray();
+      
+      logger.info(`Detected ${paymentTimedOutAuctions.length} auctions with payment timeout`);
+      
+      for (const auction of paymentTimedOutAuctions) {
+        try {
+          await this.handlePaymentTimeout(auction._id);
+          stats.success++;
+        } catch (error) {
+          logger.error(`Failed to handle payment timeout for auction ${auction._id}:`, error);
+          stats.failed++;
+        }
+      }
+      
+      return stats;
+    } catch (error) {
+      logger.error(`Error in detectAndFinalizeEndedAuctions:`, error);
+      stats.error++;
+      return stats;
+    }
+  }
+
+  /**
+   * Démarre le processus de finalisation d'une enchère
+   * @param {string} auctionId - ID de l'enchère
+   * @returns {Promise<Object>} Résultat de la finalisation
+   */
+  async startFinalization(auctionId) {
+    const auction = await this.db.auctions.findOne({ _id: auctionId });
+    
+    if (!auction) {
+      throw new Error(`Auction not found: ${auctionId}`);
+    }
+    
+    // Vérifier que l'enchère est terminée et active
+    const now = new Date();
+    if (auction.status !== 'active' || auction.endTime > now) {
+      throw new Error(`Auction ${auctionId} is not ready for finalization: status=${auction.status}, endTime=${auction.endTime}`);
+    }
+    
+    // Récupérer toutes les enchères et déterminer le gagnant
+    const bids = await this.db.bids.find({
+      auctionId: auctionId,
+      status: 'active'
+    }).sort({ amount: -1 }).toArray();
+    
+    // Si aucune enchère, marquer comme échouée
+    if (bids.length === 0) {
+      await this._finalizeWithoutWinner(auctionId, auction);
+      return { status: this.FinalizationState.FAILED, message: 'No bids placed' };
+    }
+    
+    // Préparer l'état de finalisation initial
+    const highestBid = bids[0];
+    const initialFinalizationState = {
+      state: this.FinalizationState.PENDING,
+      winningBid: highestBid._id,
+      winnerId: highestBid.bidderId,
+      winningAmount: highestBid.amount,
+      updatedAt: now,
+      history: [{
+        state: this.FinalizationState.PENDING,
+        timestamp: now,
+        message: 'Finalization process started'
+      }],
+      attempts: 0
+    };
+    
+    // Mettre à jour l'enchère avec l'état initial de finalisation
+    await this.db.auctions.updateOne(
+      { _id: auctionId },
+      { 
+        $set: { 
+          status: 'payment_pending',
+          finalization: initialFinalizationState
+        } 
+      }
+    );
+    
+    // Émettre un événement de fin d'enchère
+    this.events.emit('auction_ended', {
+      auctionId,
+      winnerId: highestBid.bidderId,
+      winningAmount: highestBid.amount,
+      timestamp: now
+    });
+    
+    // Envoyer une notification au gagnant
+    await this.notificationService.notifyAuctionWinner(
+      highestBid.bidderId,
+      auctionId,
+      highestBid.amount,
+      this.timeouts.PAYMENT
+    );
+    
+    // Commencer la vérification et le processus de paiement
+    return await this.verifyAndProcessPayment(auctionId);
+  }
+
+  /**
+   * Vérifie la solvabilité du gagnant et traite le paiement
+   * @param {string} auctionId - ID de l'enchère
+   * @returns {Promise<Object>} Résultat du processus de paiement
+   */
+  async verifyAndProcessPayment(auctionId) {
+    const auction = await this.db.auctions.findOne({ _id: auctionId });
+    
+    if (!auction || !auction.finalization) {
+      throw new Error(`Auction not found or not in finalization: ${auctionId}`);
+    }
+    
+    const { winnerId, winningAmount } = auction.finalization;
+    
+    try {
+      // Vérifier la solvabilité (méthode de paiement valide, fonds suffisants)
+      const solvencyCheck = await this.paymentService.verifySolvency(
+        winnerId,
+        winningAmount
+      );
+      
+      if (!solvencyCheck.solvent) {
+        return await this._handleInsolvency(auctionId, auction, solvencyCheck.reason);
+      }
+      
+      // Traiter le paiement
+      const paymentResult = await this.paymentService.processPayment({
+        userId: winnerId,
+        amount: winningAmount,
+        description: `Paiement pour l'enchère #${auctionId}`,
+        auctionId
+      });
+      
+      if (!paymentResult.success) {
+        return await this._handlePaymentFailure(auctionId, auction, paymentResult.reason);
+      }
+      
+      // Mettre à jour l'état avec le paiement réussi
+      const now = new Date();
+      const updatedState = {
+        state: this.FinalizationState.PAYMENT_SUCCESSFUL,
+        paymentId: overrideOptions.paymentId || `admin-override-${Date.now()}`,
+        paymentMethod: overrideOptions.paymentMethod || 'admin-override'
+      };
+    }
+    
+    if (overrideOptions.markFailed) {
+      return await this._finalizeWithoutWinner(
+        auctionId, 
+        auction, 
+        overrideOptions.failureReason || `Admin ${adminId} manually marked auction as failed`
+      );
+    }
+    
+    // Mettre à jour l'état
+    await this.db.auctions.updateOne(
+      { _id: auctionId },
+      { $set: { 'finalization': {...auction.finalization, ...updatedState} } }
+    );
+    
+    // Reprendre le processus selon l'état actuel
+    switch (updatedState.state) {
+      case this.FinalizationState.PENDING:
+        return await this.verifyAndProcessPayment(auctionId);
+      
+      case this.FinalizationState.PAYMENT_SUCCESSFUL:
+        return await this.transferRewards(auctionId);
+      
+      case this.FinalizationState.REWARDS_TRANSFERRED:
+        return await this.completeFinalization(auctionId);
+      
+      default:
+        return {
+          status: updatedState.state,
+          message: `Admin ${adminId} manually updated auction state to ${updatedState.state}`
+        };
+    }
+  }
+}
+
+module.exports = AuctionFinalizationService;
+
+        updatedAt: now,
+        paymentId: paymentResult.paymentId,
+        paymentMethod: paymentResult.paymentMethod,
+        history: [
+          ...auction.finalization.history,
+          {
+            state: this.FinalizationState.PAYMENT_SUCCESSFUL,
+            timestamp: now,
+            message: 'Payment processed successfully'
+          }
+        ]
+      };
+      
+      await this.db.auctions.updateOne(
+        { _id: auctionId },
+        { $set: { 'finalization': {...auction.finalization, ...updatedState} } }
+      );
+      
+      // Transférer les fonds au fonds des consommateurs
+      await this.consumerFundService.addFunds(
+        winningAmount,
+        `Enchère #${auctionId}`,
+        winnerId
+      );
+      
+      // Transférer la récompense (statut de sponsor)
+      return await this.transferRewards(auctionId);
+      
+    } catch (error) {
+      logger.error(`Error in verifyAndProcessPayment for auction ${auctionId}:`, error);
+      
+      // Enregistrer l'erreur et l'escalader aux administrateurs
+      await this._escalateToAdmins(auctionId, auction, error.message);
+      
+      return {
+        status: this.FinalizationState.ERROR,
+        message: `Technical error during payment processing: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Transfère les récompenses au gagnant (statut de sponsor, NFT, etc.)
+   * @param {string} auctionId - ID de l'enchère
+   * @returns {Promise<Object>} Résultat du transfert des récompenses
+   */
+  async transferRewards(auctionId) {
+    const auction = await this.db.auctions.findOne({ _id: auctionId });
+    
+    if (!auction || !auction.finalization) {
+      throw new Error(`Auction not found or not in finalization: ${auctionId}`);
+    }
+    
+    const { winnerId, winningAmount } = auction.finalization;
+    
+    try {
+      // Attribuer le statut de sponsor officiel
+      const sponsorResult = await this.rewardService.assignSponsorStatus(
+        winnerId,
+        auction.category,
+        auction.territory || 'global',
+        auctionId
+      );
+      
+      // Créer un certificat NFT pour le sponsor
+      const certificateResult = await this.rewardService.createSponsorCertificate(
+        winnerId,
+        auction.category,
+        winningAmount,
+        new Date(auction.endTime)
+      );
+      
+      // Mettre à jour l'état avec les récompenses transférées
+      const now = new Date();
+      const updatedState = {
+        state: this.FinalizationState.REWARDS_TRANSFERRED,
+        updatedAt: now,
+        sponsorId: sponsorResult.sponsorId,
+        certificateId: certificateResult.certificateId,
+        history: [
+          ...auction.finalization.history,
+          {
+            state: this.FinalizationState.REWARDS_TRANSFERRED,
+            timestamp: now,
+            message: 'Sponsor status and certificate assigned'
+          }
+        ]
+      };
+      
+      await this.db.auctions.updateOne(
+        { _id: auctionId },
+        { $set: { 'finalization': {...auction.finalization, ...updatedState} } }
+      );
+      
+      // Finaliser complètement l'enchère
+      return await this.completeFinalization(auctionId);
+      
+    } catch (error) {
+      logger.error(`Error in transferRewards for auction ${auctionId}:`, error);
+      
+      // Enregistrer l'erreur et l'escalader aux administrateurs
+      await this._escalateToAdmins(auctionId, auction, error.message);
+      
+      return {
+        status: this.FinalizationState.ERROR,
+        message: `Technical error during rewards transfer: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Finalise complètement le processus
+   * @param {string} auctionId - ID de l'enchère
+   * @returns {Promise<Object>} Résultat de la finalisation
+   */
+  async completeFinalization(auctionId) {
+    const auction = await this.db.auctions.findOne({ _id: auctionId });
+    
+    if (!auction || !auction.finalization) {
+      throw new Error(`Auction not found or not in finalization: ${auctionId}`);
+    }
+    
+    const { winnerId, winningAmount, winningBid } = auction.finalization;
+    
+    try {
+      // Marquer l'enchère comme complètement finalisée
+      const now = new Date();
+      const finalState = {
+        state: this.FinalizationState.COMPLETED,
+        updatedAt: now,
+        completedAt: now,
+        history: [
+          ...auction.finalization.history,
+          {
+            state: this.FinalizationState.COMPLETED,
+            timestamp: now,
+            message: 'Auction finalization completed successfully'
+          }
+        ]
+      };
+      
+      await this.db.auctions.updateOne(
+        { _id: auctionId },
+        { 
+          $set: { 
+            status: 'completed',
+            'finalization': {...auction.finalization, ...finalState},
+            finalizedAt: now
+          } 
+        }
+      );
+      
+      // Marquer l'enchère gagnante
+      await this.db.bids.updateOne(
+        { _id: winningBid },
+        { $set: { status: 'winning' } }
+      );
+      
+      // Émettre un événement pour la déclaration officielle du gagnant
+      this.events.emit('winner_declared', {
+        auctionId,
+        winnerId,
+        winningAmount,
+        category: auction.category,
+        territory: auction.territory || 'global',
+        timestamp: now
+      });
+      
+      // Envoyer des notifications
+      await this._sendFinalNotifications(auctionId, auction);
+      
+      return {
+        status: this.FinalizationState.COMPLETED,
+        message: 'Auction finalized successfully',
+        winnerId,
+        winningAmount
+      };
+      
+    } catch (error) {
+      logger.error(`Error in completeFinalization for auction ${auctionId}:`, error);
+      
+      // L'enchère est considérée comme complète même si les notifications échouent
+      return {
+        status: this.FinalizationState.COMPLETED,
+        message: 'Auction finalized successfully with notification errors',
+        winnerId,
+        winningAmount,
+        warnings: [error.message]
+      };
+    }
+  }
+
+  /**
+   * Gère le cas où le paiement du gagnant échoue
+   * @param {string} auctionId - ID de l'enchère
+   * @param {Object} auction - L'enchère concernée
+   * @param {string} reason - Raison de l'échec du paiement
+   * @returns {Promise<Object>} Résultat de la gestion
+   * @private
+   */
+  async _handlePaymentFailure(auctionId, auction, reason) {
+    const { winnerId, winningBid, attempts } = auction.finalization;
+    
+    // Si moins de 3 tentatives, mettre à jour l'état et réessayer plus tard
+    if (attempts < 3) {
+      const now = new Date();
+      const updatedState = {
+        attempts: attempts + 1,
+        updatedAt: now,
+        history: [
+          ...auction.finalization.history,
+          {
+            state: this.FinalizationState.PAYMENT_FAILED,
+            timestamp: now,
+            message: `Payment attempt ${attempts + 1} failed: ${reason}`
+          }
+        ]
+      };
+      
+      await this.db.auctions.updateOne(
+        { _id: auctionId },
+        { $set: { 'finalization': {...auction.finalization, ...updatedState} } }
+      );
+      
+      // Notifier le gagnant de l'échec et d'une nouvelle tentative
+      await this.notificationService.notifyPaymentFailure(
+        winnerId,
+        auctionId,
+        reason,
+        attempts + 1
+      );
+      
+      return {
+        status: this.FinalizationState.PAYMENT_FAILED,
+        message: `Payment failed (attempt ${attempts + 1}): ${reason}`,
+        nextTry: true
+      };
+    }
+    
+    // Après 3 tentatives, désélectionner ce gagnant et passer au suivant
+    await this.db.bids.updateOne(
+      { _id: winningBid },
+      { $set: { status: 'disqualified', disqualificationReason: reason } }
+    );
+    
+    // Trouver la prochaine enchère la plus élevée
+    const nextBids = await this.db.bids.find({
+      auctionId: auctionId,
+      status: 'active',
+      bidderId: { $ne: winnerId } // Exclure le gagnant précédent
+    }).sort({ amount: -1 }).limit(1).toArray();
+    
+    if (nextBids.length === 0) {
+      // Aucune autre enchère valide, marquer l'enchère comme échouée
+      return await this._finalizeWithoutWinner(auctionId, auction, `Original winner failed payment: ${reason}. No other valid bids.`);
+    }
+    
+    // Réinitialiser le processus avec le nouveau gagnant
+    const nextBid = nextBids[0];
+    const now = new Date();
+    const newFinalizationState = {
+      state: this.FinalizationState.PENDING,
+      winningBid: nextBid._id,
+      winnerId: nextBid.bidderId,
+      winningAmount: nextBid.amount,
+      previousWinners: [
+        ...(auction.finalization.previousWinners || []),
+        { 
+          bidderId: winnerId, 
+          bidId: winningBid,
+          amount: auction.finalization.winningAmount,
+          disqualificationReason: reason
+        }
+      ],
+      updatedAt: now,
+      history: [
+        ...auction.finalization.history,
+        {
+          state: this.FinalizationState.PENDING,
+          timestamp: now,
+          message: `Previous winner disqualified. New winner selected: ${nextBid.bidderId} with amount ${nextBid.amount}`
+        }
+      ],
+      attempts: 0
+    };
+    
+    await this.db.auctions.updateOne(
+      { _id: auctionId },
+      { $set: { 'finalization': newFinalizationState } }
+    );
+    
+    // Notifier le nouveau gagnant
+    await this.notificationService.notifyAuctionWinner(
+      nextBid.bidderId,
+      auctionId,
+      nextBid.amount,
+      this.timeouts.PAYMENT
+    );
+    
+    // Notifier l'ancien gagnant de sa disqualification
+    await this.notificationService.notifyWinnerDisqualification(
+      winnerId,
+      auctionId,
+      reason
+    );
+    
+    // Redémarrer le processus de paiement
+    return await this.verifyAndProcessPayment(auctionId);
+  }
+
+  /**
+   * Gère le cas où le gagnant est insolvable
+   * @param {string} auctionId - ID de l'enchère
+   * @param {Object} auction - L'enchère concernée
+   * @param {string} reason - Raison de l'insolvabilité
+   * @returns {Promise<Object>} Résultat de la gestion
+   * @private
+   */
+  async _handleInsolvency(auctionId, auction, reason) {
+    // Similaire à _handlePaymentFailure, mais avec une raison différente
+    return await this._handlePaymentFailure(auctionId, auction, `Insolvency: ${reason}`);
+  }
+
+  /**
+   * Gère le cas où aucun gagnant n'est désigné (aucune enchère ou tous disqualifiés)
+   * @param {string} auctionId - ID de l'enchère
+   * @param {Object} auction - L'enchère concernée
+   * @param {string} reason - Raison de l'absence de gagnant
+   * @returns {Promise<Object>} Résultat de la gestion
+   * @private
+   */
+  async _finalizeWithoutWinner(auctionId, auction, reason = 'No bids placed') {
+    const now = new Date();
+    const finalState = {
+      state: this.FinalizationState.FAILED,
+      updatedAt: now,
+      failedAt: now,
+      failureReason: reason,
+      history: [
+        ...(auction.finalization?.history || []),
+        {
+          state: this.FinalizationState.FAILED,
+          timestamp: now,
+          message: reason
+        }
+      ]
+    };
+    
+    await this.db.auctions.updateOne(
+      { _id: auctionId },
+      { 
+        $set: { 
+          status: 'failed',
+          finalization: auction.finalization ? {...auction.finalization, ...finalState} : finalState,
+          finalizedAt: now
+        } 
+      }
+    );
+    
+    // Émettre un événement d'enchère échouée
+    this.events.emit('auction_failed', {
+      auctionId,
+      reason,
+      timestamp: now
+    });
+    
+    // Notifier les administrateurs
+    await this.adminService.notifyAuctionFailure(auctionId, reason);
+    
+    return {
+      status: this.FinalizationState.FAILED,
+      message: `Auction finalized without winner: ${reason}`
+    };
+  }
+
+  /**
+   * Gère le cas où le délai de paiement est dépassé
+   * @param {string} auctionId - ID de l'enchère
+   * @returns {Promise<Object>} Résultat de la gestion
+   */
+  async handlePaymentTimeout(auctionId) {
+    const auction = await this.db.auctions.findOne({ _id: auctionId });
+    
+    if (!auction || !auction.finalization) {
+      throw new Error(`Auction not found or not in finalization: ${auctionId}`);
+    }
+    
+    if (auction.status !== 'payment_pending') {
+      return { status: auction.status, message: 'Auction is not in payment_pending status' };
+    }
+    
+    const { winnerId, winningBid } = auction.finalization;
+    
+    // Marquer l'enchère comme timeout
+    const now = new Date();
+    await this.db.auctions.updateOne(
+      { _id: auctionId },
+      { 
+        $set: { 
+          'finalization.updatedAt': now,
+          'finalization.history': [
+            ...auction.finalization.history,
+            {
+              state: this.FinalizationState.PAYMENT_FAILED,
+              timestamp: now,
+              message: 'Payment timeout occurred'
+            }
+          ]
+        } 
+      }
+    );
+    
+    // Disqualifier le gagnant actuel
+    await this.db.bids.updateOne(
+      { _id: winningBid },
+      { $set: { status: 'disqualified', disqualificationReason: 'Payment timeout' } }
+    );
+    
+    // Notifier le gagnant de sa disqualification
+    await this.notificationService.notifyWinnerDisqualification(
+      winnerId,
+      auctionId,
+      'Payment timeout'
+    );
+    
+    // Traiter comme un échec de paiement
+    return await this._handlePaymentFailure(auctionId, auction, 'Payment timeout');
+  }
+
+  /**
+   * Escalade un problème aux administrateurs
+   * @param {string} auctionId - ID de l'enchère
+   * @param {Object} auction - L'enchère concernée
+   * @param {string} reason - Raison de l'escalade
+   * @returns {Promise<Object>} Résultat de l'escalade
+   * @private
+   */
+  async _escalateToAdmins(auctionId, auction, reason) {
+    const now = new Date();
+    const updatedState = {
+      state: this.FinalizationState.ADMIN_REVIEW,
+      updatedAt: now,
+      escalationReason: reason,
+      history: [
+        ...auction.finalization.history,
+        {
+          state: this.FinalizationState.ADMIN_REVIEW,
+          timestamp: now,
+          message: `Escalated to administrators: ${reason}`
+        }
+      ]
+    };
+    
+    await this.db.auctions.updateOne(
+      { _id: auctionId },
+      { $set: { 'finalization': {...auction.finalization, ...updatedState} } }
+    );
+    
+    // Notifier les administrateurs
+    await this.adminService.notifyEscalation(auctionId, reason, auction.finalization);
+    
+    return {
+      status: this.FinalizationState.ADMIN_REVIEW,
+      message: `Issue escalated to administrators: ${reason}`
+    };
+  }
+
+  /**
+   * Envoie les notifications finales après finalisation réussie
+   * @param {string} auctionId - ID de l'enchère
+   * @param {Object} auction - L'enchère concernée
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _sendFinalNotifications(auctionId, auction) {
+    const { winnerId, winningAmount } = auction.finalization;
+    
+    // Notifier le gagnant de sa victoire officielle
+    await this.notificationService.notifyOfficialWinner(
+      winnerId,
+      auctionId,
+      auction.category,
+      winningAmount
+    );
+    
+    // Notifier les autres participants
+    const otherBidders = await this.db.bids.find({
+      auctionId: auctionId,
+      bidderId: { $ne: winnerId },
+      status: 'active'
+    }).distinct('bidderId');
+    
+    for (const bidderId of otherBidders) {
+      await this.notificationService.notifyAuctionResult(
+        bidderId,
+        auctionId,
+        auction.category,
+        winningAmount,
+        winnerId
+      );
+    }
+    
+    // Notifier les ONG partenaires
+    await this.notificationService.notifyNGOPartners(
+      auction.category,
+      auctionId,
+      winningAmount,
+      winnerId
+    );
+  }
+
+  /**
+   * Permet aux administrateurs de reprendre manuellement la finalisation
+   * @param {string} auctionId - ID de l'enchère
+   * @param {string} adminId - ID de l'administrateur
+   * @param {Object} overrideOptions - Options pour résoudre manuellement les problèmes
+   * @returns {Promise<Object>} Résultat de la reprise
+   */
+  async adminResumeFinalization(auctionId, adminId, overrideOptions = {}) {
+    const auction = await this.db.auctions.findOne({ _id: auctionId });
+    
+    if (!auction || !auction.finalization) {
+      throw new Error(`Auction not found or not in finalization: ${auctionId}`);
+    }
+    
+    // Vérifier que l'utilisateur est bien un administrateur
+    const isAdmin = await this.adminService.isAdmin(adminId);
+    if (!isAdmin) {
+      throw new Error('User is not authorized to perform admin actions');
+    }
+    
+    const now = new Date();
+    let updatedState = {
+      updatedAt: now,
+      history: [
+        ...auction.finalization.history,
+        {
+          state: auction.finalization.state,
+          timestamp: now,
+          message: `Admin ${adminId} manually resumed finalization with options: ${JSON.stringify(overrideOptions)}`
+        }
+      ]
+    };
+    
+    // Appliquer les options de résolution
+    if (overrideOptions.forceWinner) {
+      if (overrideOptions.newWinnerId) {
+        // Trouver l'enchère du nouveau gagnant
+        const newWinnerBid = await this.db.bids.findOne({
+          auctionId: auctionId,
+          bidderId: overrideOptions.newWinnerId
+        });
+        
+        if (!newWinnerBid) {
+          throw new Error(`No bid found for new winner ${overrideOptions.newWinnerId}`);
+        }
+        
+        updatedState = {
+          ...updatedState,
+          winnerId: overrideOptions.newWinnerId,
+          winningBid: newWinnerBid._id,
+          winningAmount: newWinnerBid.amount,
+          state: this.FinalizationState.PENDING,
+          attempts: 0
+        };
+      }
+    }
+    
+    if (overrideOptions.skipPayment) {
+      updatedState = {
+        ...updatedState,
+        state: this.FinalizationState.PAYMENT_SUCCESSFUL,

@@ -1,0 +1,396 @@
+// models/Company.js
+// Modèle pour les entreprises candidates et lauréates
+
+const mongoose = require('mongoose');
+
+// Statuts de candidature
+const COMPANY_STATUS = {
+  REGISTRATION_INCOMPLETE: 'registration_incomplete', // Inscription incomplète
+  PENDING_VERIFICATION: 'pending_verification',       // En attente de vérification
+  VERIFIED: 'verified',                               // Vérifiée
+  AUCTION_PARTICIPANT: 'auction_participant',         // Participante aux enchères
+  AUCTION_WINNER: 'auction_winner',                   // Gagnante d'enchère (lauréate)
+  SUSPENDED: 'suspended',                             // Suspendue
+  REJECTED: 'rejected'                                // Rejetée
+};
+
+// Types d'entreprises
+const COMPANY_TYPES = {
+  CORPORATION: 'corporation',     // Grande entreprise
+  SME: 'sme',                     // PME
+  STARTUP: 'startup',             // Startup
+  NONPROFIT: 'nonprofit',         // Association/ONG
+  GOVERNMENT: 'government',       // Entité gouvernementale
+  OTHER: 'other'                  // Autre
+};
+
+// Statuts de vérification des représentants
+const REPRESENTATIVES_STATUS = {
+  INCOMPLETE: 'incomplete',       // Moins de 3 représentants
+  PENDING: 'pending',             // 3 représentants en attente de vérification
+  PARTIAL: 'partial',             // Certains représentants vérifiés, d'autres en attente
+  COMPLETE: 'complete',           // Tous les représentants vérifiés
+  REJECTED: 'rejected'            // Au moins un représentant rejeté
+};
+
+// Schéma d'entreprise
+const companySchema = new mongoose.Schema({
+  // Informations de base
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    index: true
+  },
+  legalName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  registrationNumber: {
+    type: String,
+    required: true,
+    trim: true,
+    unique: true
+  },
+  taxId: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  
+  // Type et secteur
+  companyType: {
+    type: String,
+    enum: Object.values(COMPANY_TYPES),
+    required: true
+  },
+  industry: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  sectors: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Sector'
+  }],
+  
+  // Contact et localisation
+  email: {
+    type: String,
+    required: true,
+    trim: true,
+    lowercase: true
+  },
+  phone: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  website: {
+    type: String,
+    trim: true
+  },
+  address: {
+    street: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    city: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    zipCode: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    country: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    coordinates: {
+      lat: Number,
+      lng: Number
+    }
+  },
+  
+  // Statut et vérification
+  status: {
+    type: String,
+    enum: Object.values(COMPANY_STATUS),
+    default: COMPANY_STATUS.REGISTRATION_INCOMPLETE
+  },
+  representativesStatus: {
+    type: String,
+    enum: Object.values(REPRESENTATIVES_STATUS),
+    default: REPRESENTATIVES_STATUS.INCOMPLETE
+  },
+  verifiedAt: Date,
+  verifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin'
+  },
+  
+  // Enchères
+  participatingAuctions: [{
+    auctionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Auction'
+    },
+    sectorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Sector'
+    },
+    bidAmount: Number,
+    bidTime: Date,
+    status: {
+      type: String,
+      enum: ['participating', 'winner', 'outbid', 'cancelled'],
+      default: 'participating'
+    }
+  }],
+  
+  // Pour les lauréats (vainqueurs d'enchères)
+  wonAuctions: [{
+    auctionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Auction'
+    },
+    sectorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Sector'
+    },
+    finalBidAmount: Number,
+    winningDate: Date,
+    contractAddress: String, // Adresse du contrat blockchain pour ce secteur
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'partial', 'complete', 'refunded'],
+      default: 'pending'
+    },
+    paymentDetails: {
+      amountPaid: Number,
+      transactionHashes: [String],
+      lastPaymentDate: Date
+    }
+  }],
+  
+  // Documents et vérification
+  documents: [{
+    type: {
+      type: String,
+      enum: ['registration', 'tax', 'financial', 'identity', 'authorization', 'other'],
+      required: true
+    },
+    name: {
+      type: String,
+      required: true
+    },
+    fileUrl: {
+      type: String,
+      required: true
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'verified', 'rejected'],
+      default: 'pending'
+    },
+    verifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin'
+    },
+    verifiedAt: Date,
+    rejectionReason: String
+  }],
+  
+  // Blockchain et paiement
+  walletAddress: {
+    type: String,
+    trim: true
+  },
+  paymentMethods: [{
+    type: {
+      type: String,
+      enum: ['crypto', 'bank_transfer', 'credit_card'],
+      required: true
+    },
+    details: mongoose.Schema.Types.Mixed,
+    isDefault: {
+      type: Boolean,
+      default: false
+    },
+    addedAt: {
+      type: Date,
+      default: Date.now
+    },
+    verified: {
+      type: Boolean,
+      default: false
+    }
+  }],
+  
+  // Commentaires et notes internes
+  internalNotes: [{
+    text: {
+      type: String,
+      required: true
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin',
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  
+  // Métadonnées
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
+}, {
+  timestamps: true
+});
+
+// Index pour des recherches efficaces
+companySchema.index({ name: 'text', legalName: 'text' });
+companySchema.index({ status: 1 });
+companySchema.index({ representativesStatus: 1 });
+companySchema.index({ 'participatingAuctions.auctionId': 1 });
+companySchema.index({ 'wonAuctions.sectorId': 1 });
+
+// Middleware de pré-sauvegarde
+companySchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
+  next();
+});
+
+// Méthode pour vérifier si l'entreprise a ses 3 représentants
+companySchema.methods.updateRepresentativesStatus = async function() {
+  const { CompanyRepresentative } = require('./CompanyRepresentative');
+  
+  // Récupérer tous les représentants de cette entreprise
+  const representatives = await CompanyRepresentative.find({
+    companyId: this._id
+  });
+  
+  // Si moins de 3 représentants
+  if (representatives.length < 3) {
+    this.representativesStatus = REPRESENTATIVES_STATUS.INCOMPLETE;
+    return await this.save();
+  }
+  
+  // Compter les représentants par statut
+  const verified = representatives.filter(rep => rep.status === 'verified').length;
+  const rejected = representatives.filter(rep => rep.status === 'rejected').length;
+  const pending = representatives.filter(rep => rep.status === 'pending').length;
+  
+  // Déterminer le statut global
+  if (rejected > 0) {
+    this.representativesStatus = REPRESENTATIVES_STATUS.REJECTED;
+  } else if (verified === 3) {
+    this.representativesStatus = REPRESENTATIVES_STATUS.COMPLETE;
+  } else if (verified > 0) {
+    this.representativesStatus = REPRESENTATIVES_STATUS.PARTIAL;
+  } else {
+    this.representativesStatus = REPRESENTATIVES_STATUS.PENDING;
+  }
+  
+  // Mettre à jour le statut global de l'entreprise si nécessaire
+  if (this.status === COMPANY_STATUS.REGISTRATION_INCOMPLETE && 
+      this.representativesStatus === REPRESENTATIVES_STATUS.COMPLETE) {
+    this.status = COMPANY_STATUS.PENDING_VERIFICATION;
+  }
+  
+  return await this.save();
+};
+
+// Méthode pour vérifier si l'entreprise est éligible pour participer aux enchères
+companySchema.methods.isEligibleForAuction = function() {
+  return this.status === COMPANY_STATUS.VERIFIED &&
+         this.representativesStatus === REPRESENTATIVES_STATUS.COMPLETE;
+};
+
+// Méthode pour ajouter l'entreprise comme participant à une enchère
+companySchema.methods.addToAuction = async function(auctionId, sectorId) {
+  // Vérifier si l'entreprise est déjà inscrite à cette enchère
+  const alreadyParticipating = this.participatingAuctions.some(
+    p => p.auctionId.toString() === auctionId.toString() && 
+         p.sectorId.toString() === sectorId.toString()
+  );
+  
+  if (alreadyParticipating) {
+    return false;
+  }
+  
+  // Ajouter l'enchère à la liste des participations
+  this.participatingAuctions.push({
+    auctionId,
+    sectorId,
+    bidAmount: 0,
+    bidTime: null,
+    status: 'participating'
+  });
+  
+  // Mettre à jour le statut de l'entreprise si nécessaire
+  if (this.status === COMPANY_STATUS.VERIFIED) {
+    this.status = COMPANY_STATUS.AUCTION_PARTICIPANT;
+  }
+  
+  await this.save();
+  return true;
+};
+
+// Méthode pour marquer l'entreprise comme lauréate d'une enchère
+companySchema.methods.markAsAuctionWinner = async function(auctionId, sectorId, finalBidAmount) {
+  // Mettre à jour le statut de l'enchère dans participatingAuctions
+  for (const auction of this.participatingAuctions) {
+    if (auction.auctionId.toString() === auctionId.toString() && 
+        auction.sectorId.toString() === sectorId.toString()) {
+      auction.status = 'winner';
+      auction.bidAmount = finalBidAmount;
+      auction.bidTime = new Date();
+    }
+  }
+  
+  // Ajouter aux enchères gagnées
+  this.wonAuctions.push({
+    auctionId,
+    sectorId,
+    finalBidAmount,
+    winningDate: new Date(),
+    paymentStatus: 'pending'
+  });
+  
+  // Mettre à jour le statut global
+  this.status = COMPANY_STATUS.AUCTION_WINNER;
+  
+  await this.save();
+  return true;
+};
+
+// Créer le modèle à partir du schéma
+const Company = mongoose.model('Company', companySchema);
+
+// Exporter les constantes avec le modèle
+module.exports = {
+  Company,
+  COMPANY_STATUS,
+  COMPANY_TYPES,
+  REPRESENTATIVES_STATUS
+};

@@ -1,0 +1,207 @@
+// utils/keyManager.js
+// Service sécurisé pour la gestion des clés privées
+
+const fs = require('fs').promises;
+const path = require('path');
+const crypto = require('crypto');
+const dotenv = require('dotenv');
+const logger = require('./logger');
+const { logError } = require('./errorTracking');
+
+// Charger les variables d'environnement
+dotenv.config();
+
+// Emplacement des clés (configuré via des variables d'environnement)
+const KEY_STORAGE_PATH = process.env.KEY_STORAGE_PATH || path.join(__dirname, '../..', '.keys');
+const KEY_FILENAME = process.env.KEY_FILENAME || 'etika_private_key.enc';
+const KEY_PASSWORD_ENV = 'ETIKA_KEY_PASSWORD'; // Nom de la variable d'environnement contenant le mot de passe
+
+// Algorithme d'encryption
+const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
+const IV_LENGTH = 16; // Pour AES, IV est toujours 16 bytes
+const AUTH_TAG_LENGTH = 16; // Pour GCM, longueur du tag d'authentification
+
+/**
+ * Charge la clé privée de manière sécurisée
+ * @returns {Promise<string|null>} La clé privée déchiffrée ou null en cas d'erreur
+ */
+async function loadPrivateKey() {
+  try {
+    // Vérifie si la variable d'environnement est définie
+    const password = process.env[KEY_PASSWORD_ENV];
+    if (!password) {
+      throw new Error(`Environment variable ${KEY_PASSWORD_ENV} is not set`);
+    }
+    
+    // Chemin complet du fichier de clé
+    const keyPath = path.join(KEY_STORAGE_PATH, KEY_FILENAME);
+    
+    // Vérifie si le fichier existe
+    try {
+      await fs.access(keyPath);
+    } catch (error) {
+      throw new Error(`Key file not found at ${keyPath}`);
+    }
+    
+    // Lire le fichier chiffré
+    const encryptedData = await fs.readFile(keyPath);
+    
+    // Déchiffrer la clé
+    const iv = encryptedData.slice(0, IV_LENGTH);
+    const authTag = encryptedData.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
+    const encryptedKey = encryptedData.slice(IV_LENGTH + AUTH_TAG_LENGTH);
+    
+    // Dériver la clé de chiffrement à partir du mot de passe
+    const key = crypto.scryptSync(password, 'etika-salt', 32);
+    
+    // Créer le déchiffreur
+    const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, key, iv);
+    decipher.setAuthTag(authTag);
+    
+    // Déchiffrer
+    let decrypted = decipher.update(encryptedKey);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    
+    return decrypted.toString('utf8');
+  } catch (error) {
+    logError('Failed to load private key', error);
+    return null;
+  }
+}
+
+/**
+ * Sauvegarde une clé privée de manière sécurisée
+ * @param {string} privateKey - La clé privée à sauvegarder
+ * @returns {Promise<boolean>} Succès ou échec de l'opération
+ */
+async function savePrivateKey(privateKey) {
+  try {
+    // Vérifie si la variable d'environnement est définie
+    const password = process.env[KEY_PASSWORD_ENV];
+    if (!password) {
+      throw new Error(`Environment variable ${KEY_PASSWORD_ENV} is not set`);
+    }
+    
+    // S'assurer que le dossier de stockage existe
+    await fs.mkdir(KEY_STORAGE_PATH, { recursive: true });
+    
+    // Chemin complet du fichier de clé
+    const keyPath = path.join(KEY_STORAGE_PATH, KEY_FILENAME);
+    
+    // Générer un IV aléatoire
+    const iv = crypto.randomBytes(IV_LENGTH);
+    
+    // Dériver la clé de chiffrement à partir du mot de passe
+    const key = crypto.scryptSync(password, 'etika-salt', 32);
+    
+    // Créer le chiffreur
+    const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
+    
+    // Chiffrer
+    let encrypted = cipher.update(privateKey, 'utf8');
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    
+    // Obtenir le tag d'authentification
+    const authTag = cipher.getAuthTag();
+    
+    // Combiner IV, tag d'authentification et données chiffrées
+    const encryptedData = Buffer.concat([iv, authTag, encrypted]);
+    
+    // Sauvegarder dans le fichier
+    await fs.writeFile(keyPath, encryptedData);
+    
+    // Restreindre les permissions du fichier (lecture seule par le propriétaire)
+    await fs.chmod(keyPath, 0o400);
+    
+    logger.info(`Private key saved securely to ${keyPath}`);
+    return true;
+  } catch (error) {
+    logError('Failed to save private key', error);
+    return false;
+  }
+}
+
+/**
+ * Génère une nouvelle paire de clés
+ * @param {string} type - Type de clé ('ethereum', 'tezos', etc.)
+ * @returns {Promise<Object>} Paire de clés générée {privateKey, publicKey, address}
+ */
+async function generateKeyPair(type = 'ethereum') {
+  try {
+    let keyPair;
+    
+    switch (type.toLowerCase()) {
+      case 'ethereum': {
+        // Utiliser ethers.js pour générer une clé Ethereum
+        const { ethers } = require('ethers');
+        const wallet = ethers.Wallet.createRandom();
+        keyPair = {
+          privateKey: wallet.privateKey,
+          publicKey: wallet.publicKey,
+          address: wallet.address
+        };
+        break;
+      }
+      
+      case 'tezos': {
+        // Exemple avec Tezos (à implémenter avec la bibliothèque appropriée)
+        throw new Error('Tezos key generation not implemented yet');
+      }
+      
+      default:
+        throw new Error(`Unsupported key type: ${type}`);
+    }
+    
+    // Sauvegarder la clé privée de manière sécurisée
+    const saved = await savePrivateKey(keyPair.privateKey);
+    if (!saved) {
+      throw new Error('Failed to save the generated private key');
+    }
+    
+    logger.info(`New ${type} key pair generated successfully`);
+    
+    // Ne jamais retourner la clé privée complète, seulement un indicateur de succès
+    return {
+      success: true,
+      publicKey: keyPair.publicKey,
+      address: keyPair.address,
+      type
+    };
+  } catch (error) {
+    logError(`Failed to generate ${type} key pair`, error);
+    throw new Error(`Key generation failed: ${error.message}`);
+  }
+}
+
+/**
+ * Vérifie si une clé privée est déjà configurée
+ * @returns {Promise<boolean>} True si une clé existe
+ */
+async function hasPrivateKey() {
+  try {
+    const keyPath = path.join(KEY_STORAGE_PATH, KEY_FILENAME);
+    await fs.access(keyPath);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Signe un message avec la clé privée
+ * @param {string|Buffer} message - Message à signer
+ * @param {string} type - Type de signature ('ethereum', 'tezos', etc.)
+ * @returns {Promise<string>} Signature
+ */
+async function signMessage(message, type = 'ethereum') {
+  try {
+    const privateKey = await loadPrivateKey();
+    if (!privateKey) {
+      throw new Error('Private key not available');
+    }
+    
+    let signature;
+    
+    switch (type.toLowerCase()) {
+      case 'ethereum': {
+        //

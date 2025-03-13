@@ -1,0 +1,408 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.9;
+
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+/**
+ * @title SponsorTreasury
+ * @dev Contrat pour gérer la caisse commune des sponsors et la distribution des avoirs
+ */
+contract SponsorTreasury is AccessControl, Pausable, ReentrancyGuard {
+    // Rôles pour la gestion des autorisations
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant SPONSOR_ROLE = keccak256("SPONSOR_ROLE");
+
+    // Interface du contrat de cartes de fidélité
+    interface ILoyaltyCard {
+        function addBalance(uint256 tokenId, uint256 sectorId, uint256 amount) external;
+    }
+
+    // Adresse du contrat de cartes de fidélité
+    address public loyaltyCardContract;
+
+    // Structure d'un sponsor pour un secteur
+    struct SectorSponsor {
+        address sponsorAddress;    // Adresse du sponsor
+        uint256 allocatedFunds;    // Fonds alloués au secteur
+        uint256 consumedFunds;     // Fonds déjà consommés
+        uint256 startTime;         // Début de la période de sponsoring
+        uint256 endTime;           // Fin de la période de sponsoring
+        bool active;               // Si le sponsor est actif
+    }
+
+    // Structure d'une contribution
+    struct Contribution {
+        address sponsor;           // Adresse du contributeur
+        uint256 amount;            // Montant de la contribution
+        uint256 timestamp;         // Horodatage de la contribution
+        string transactionType;    // Type de transaction (ex: "auction_win", "topup")
+        bytes32 referenceId;       // ID de référence (ex: ID de l'enchère)
+    }
+
+    // Mapping des sponsors par secteur
+    mapping(uint256 => SectorSponsor) public sectorSponsors;
+    
+    // Liste des IDs de secteurs sponsorisés
+    uint256[] public sponsoredSectorIds;
+    
+    // Historique des contributions
+    mapping(address => Contribution[]) private sponsorContributions;
+    
+    // Solde total disponible
+    uint256 public totalBalance;
+    
+    // Solde par secteur
+    mapping(uint256 => uint256) public sectorBalances;
+    
+    // Événements
+    event SponsorAdded(uint256 indexed sectorId, address indexed sponsor, uint256 allocatedFunds, uint256 startTime, uint256 endTime);
+    event ContributionReceived(address indexed sponsor, uint256 amount, bytes32 indexed referenceId, string transactionType);
+    event FundsAllocated(uint256 indexed sectorId, uint256 amount);
+    event AvoirsDistributed(uint256 indexed sectorId, uint256 indexed tokenId, uint256 amount);
+    event EmergencyWithdrawal(address indexed to, uint256 amount);
+
+    /**
+     * @dev Constructeur
+     * @param _loyaltyCardContract Adresse du contrat de cartes de fidélité
+     */
+    constructor(address _loyaltyCardContract) {
+        loyaltyCardContract = _loyaltyCardContract;
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
+        _grantRole(OPERATOR_ROLE, msg.sender);
+    }
+
+    /**
+     * @dev Modifier pour restreindre l'accès au sponsor d'un secteur
+     * @param sectorId ID du secteur
+     */
+    modifier onlySectorSponsor(uint256 sectorId) {
+        require(
+            sectorSponsors[sectorId].sponsorAddress == msg.sender || 
+            hasRole(ADMIN_ROLE, msg.sender) || 
+            hasRole(OPERATOR_ROLE, msg.sender),
+            "Not authorized for this sector"
+        );
+        _;
+    }
+
+    /**
+     * @dev Ajoute ou met à jour un sponsor pour un secteur
+     * @param sectorId ID du secteur
+     * @param sponsor Adresse du sponsor
+     * @param allocatedFunds Fonds alloués au secteur
+     * @param durationDays Durée en jours de la période de sponsoring
+     */
+    function addSponsor(
+        uint256 sectorId,
+        address sponsor,
+        uint256 allocatedFunds,
+        uint256 durationDays
+    ) 
+        external 
+        onlyRole(ADMIN_ROLE) 
+        whenNotPaused 
+    {
+        require(sponsor != address(0), "Invalid sponsor address");
+        require(allocatedFunds > 0, "Allocated funds must be positive");
+        require(durationDays > 0, "Duration must be positive");
+        
+        // Calculer la période de sponsoring
+        uint256 startTime = block.timestamp;
+        uint256 endTime = startTime + (durationDays * 1 days);
+        
+        // Vérifier si le secteur est déjà sponsorisé
+        bool isNewSector = sectorSponsors[sectorId].sponsorAddress == address(0);
+        
+        // Si le même sponsor étend son sponsoring, préserver les fonds consommés
+        uint256 consumedFunds = 0;
+        if (!isNewSector && sectorSponsors[sectorId].sponsorAddress == sponsor) {
+            consumedFunds = sectorSponsors[sectorId].consumedFunds;
+        }
+        
+        // Mettre à jour les informations du sponsor
+        sectorSponsors[sectorId] = SectorSponsor({
+            sponsorAddress: sponsor,
+            allocatedFunds: allocatedFunds,
+            consumedFunds: consumedFunds,
+            startTime: startTime,
+            endTime: endTime,
+            active: true
+        });
+        
+        // Ajouter à la liste des secteurs sponsorisés si nouveau
+        if (isNewSector) {
+            sponsoredSectorIds.push(sectorId);
+        }
+        
+        // Accorder le rôle de sponsor
+        _grantRole(SPONSOR_ROLE, sponsor);
+        
+        // Mettre à jour le solde du secteur
+        sectorBalances[sectorId] += allocatedFunds;
+        
+        // Mettre à jour le solde total
+        totalBalance += allocatedFunds;
+        
+        emit SponsorAdded(sectorId, sponsor, allocatedFunds, startTime, endTime);
+    }
+
+    /**
+     * @dev Reçoit une contribution d'un sponsor
+     * @param referenceId ID de référence (ex: ID de l'enchère)
+     * @param transactionType Type de transaction
+     */
+    function contributeNative(bytes32 referenceId, string calldata transactionType) 
+        external 
+        payable 
+        whenNotPaused 
+    {
+        require(msg.value > 0, "Contribution must be positive");
+        
+        // Enregistrer la contribution
+        Contribution memory contribution = Contribution({
+            sponsor: msg.sender,
+            amount: msg.value,
+            timestamp: block.timestamp,
+            transactionType: transactionType,
+            referenceId: referenceId
+        });
+        
+        sponsorContributions[msg.sender].push(contribution);
+        
+        // Mettre à jour le solde total
+        totalBalance += msg.value;
+        
+        emit ContributionReceived(msg.sender, msg.value, referenceId, transactionType);
+    }
+
+    /**
+     * @dev Reçoit une contribution d'un sponsor en tokens ERC20
+     * @param tokenAddress Adresse du token
+     * @param amount Montant à contribuer
+     * @param referenceId ID de référence (ex: ID de l'enchère)
+     * @param transactionType Type de transaction
+     */
+    function contributeERC20(
+        address tokenAddress, 
+        uint256 amount, 
+        bytes32 referenceId, 
+        string calldata transactionType
+    ) 
+        external 
+        whenNotPaused 
+    {
+        require(amount > 0, "Contribution must be positive");
+        
+        // Transférer les tokens
+        IERC20 token = IERC20(tokenAddress);
+        require(token.transferFrom(msg.sender, address(this), amount), "Token transfer failed");
+        
+        // Enregistrer la contribution
+        Contribution memory contribution = Contribution({
+            sponsor: msg.sender,
+            amount: amount,
+            timestamp: block.timestamp,
+            transactionType: transactionType,
+            referenceId: referenceId
+        });
+        
+        sponsorContributions[msg.sender].push(contribution);
+        
+        // Mettre à jour le solde total (pour les tokens, on utilise une équivalence 1:1)
+        totalBalance += amount;
+        
+        emit ContributionReceived(msg.sender, amount, referenceId, transactionType);
+    }
+
+    /**
+     * @dev Alloue des fonds à un secteur spécifique
+     * @param sectorId ID du secteur
+     * @param amount Montant à allouer
+     */
+    function allocateToSector(uint256 sectorId, uint256 amount) 
+        external 
+        onlyRole(ADMIN_ROLE) 
+        whenNotPaused 
+    {
+        require(amount > 0, "Amount must be positive");
+        require(amount <= totalBalance, "Insufficient total balance");
+        
+        // Mettre à jour le solde du secteur
+        sectorBalances[sectorId] += amount;
+        
+        // Mettre à jour le solde total (pas nécessaire car on ne fait que réallouer)
+        
+        emit FundsAllocated(sectorId, amount);
+    }
+
+    /**
+     * @dev Distribue des avoirs à un utilisateur
+     * @param sectorId ID du secteur
+     * @param tokenId ID du token NFT de l'utilisateur
+     * @param amount Montant des avoirs à distribuer
+     */
+    function distributeAvoirs(uint256 sectorId, uint256 tokenId, uint256 amount) 
+        external 
+        whenNotPaused 
+        nonReentrant 
+        onlySectorSponsor(sectorId) 
+    {
+        require(amount > 0, "Amount must be positive");
+        require(sectorBalances[sectorId] >= amount, "Insufficient sector balance");
+        
+        // Vérifier que le secteur a un sponsor actif
+        SectorSponsor storage sponsor = sectorSponsors[sectorId];
+        require(sponsor.active, "Sector has no active sponsor");
+        require(block.timestamp < sponsor.endTime, "Sponsorship period has ended");
+        
+        // Mettre à jour les fonds consommés
+        sponsor.consumedFunds += amount;
+        
+        // Mettre à jour le solde du secteur
+        sectorBalances[sectorId] -= amount;
+        
+        // Mettre à jour le solde total
+        totalBalance -= amount;
+        
+        // Ajouter les avoirs à la carte de fidélité de l'utilisateur
+        ILoyaltyCard loyaltyCard = ILoyaltyCard(loyaltyCardContract);
+        loyaltyCard.addBalance(tokenId, sectorId, amount);
+        
+        emit AvoirsDistributed(sectorId, tokenId, amount);
+    }
+
+    /**
+     * @dev Récupère le solde disponible pour un secteur
+     * @param sectorId ID du secteur
+     * @return Solde disponible
+     */
+    function getSectorBalance(uint256 sectorId) external view returns (uint256) {
+        return sectorBalances[sectorId];
+    }
+
+    /**
+     * @dev Récupère les informations d'un sponsor pour un secteur
+     * @param sectorId ID du secteur
+     * @return sponsorAddress Adresse du sponsor
+     * @return allocatedFunds Fonds alloués
+     * @return consumedFunds Fonds consommés
+     * @return startTime Début de la période
+     * @return endTime Fin de la période
+     * @return active Si le sponsor est actif
+     */
+    function getSponsorInfo(uint256 sectorId) 
+        external 
+        view 
+        returns (
+            address sponsorAddress,
+            uint256 allocatedFunds,
+            uint256 consumedFunds,
+            uint256 startTime,
+            uint256 endTime,
+            bool active
+        ) 
+    {
+        SectorSponsor memory sponsor = sectorSponsors[sectorId];
+        return (
+            sponsor.sponsorAddress,
+            sponsor.allocatedFunds,
+            sponsor.consumedFunds,
+            sponsor.startTime,
+            sponsor.endTime,
+            sponsor.active
+        );
+    }
+
+    /**
+     * @dev Récupère la liste des IDs de secteurs sponsorisés
+     * @return Liste des IDs de secteurs
+     */
+    function getSponsoredSectors() external view returns (uint256[] memory) {
+        return sponsoredSectorIds;
+    }
+
+    /**
+     * @dev Récupère les contributions d'un sponsor
+     * @param sponsor Adresse du sponsor
+     * @return Liste des contributions
+     */
+    function getSponsorContributions(address sponsor) 
+        external 
+        view 
+        returns (Contribution[] memory) 
+    {
+        return sponsorContributions[sponsor];
+    }
+
+    /**
+     * @dev Met le contrat en pause
+     */
+    function pause() external onlyRole(ADMIN_ROLE) {
+        _pause();
+    }
+
+    /**
+     * @dev Reprend le contrat après une pause
+     */
+    function unpause() external onlyRole(ADMIN_ROLE) {
+        _unpause();
+    }
+
+    /**
+     * @dev Met à jour l'adresse du contrat de cartes de fidélité
+     * @param newAddress Nouvelle adresse
+     */
+    function updateLoyaltyCardAddress(address newAddress) external onlyRole(ADMIN_ROLE) {
+        require(newAddress != address(0), "Invalid address");
+        loyaltyCardContract = newAddress;
+    }
+
+    /**
+     * @dev Retire les fonds en cas d'urgence
+     * @param to Adresse de destination
+     * @param amount Montant à retirer
+     */
+    function emergencyWithdraw(address payable to, uint256 amount) 
+        external 
+        onlyRole(ADMIN_ROLE) 
+    {
+        require(to != address(0), "Invalid address");
+        require(amount <= address(this).balance, "Insufficient balance");
+        
+        // Transférer les fonds
+        (bool success, ) = to.call{value: amount}("");
+        require(success, "Transfer failed");
+        
+        emit EmergencyWithdrawal(to, amount);
+    }
+
+    /**
+     * @dev Retire des tokens ERC20 en cas d'urgence
+     * @param tokenAddress Adresse du token
+     * @param to Adresse de destination
+     * @param amount Montant à retirer
+     */
+    function emergencyWithdrawERC20(address tokenAddress, address to, uint256 amount) 
+        external 
+        onlyRole(ADMIN_ROLE) 
+    {
+        require(to != address(0), "Invalid address");
+        
+        IERC20 token = IERC20(tokenAddress);
+        require(token.transfer(to, amount), "Token transfer failed");
+        
+        emit EmergencyWithdrawal(to, amount);
+    }
+
+    /**
+     * @dev Reçoit des fonds natifs
+     */
+    receive() external payable {
+        totalBalance += msg.value;
+    }
+}

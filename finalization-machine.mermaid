@@ -1,0 +1,26 @@
+stateDiagram-v2
+    [*] --> Active: Création de l'enchère
+    
+    Active --> EndedAwaitingFinalization: Fin de l'enchère
+    EndedAwaitingFinalization --> Pending: Démarrage finalisation
+    
+    Pending --> PaymentPending: Gagnant désigné
+    Pending --> Failed: Aucune enchère
+    
+    PaymentPending --> PaymentSuccessful: Paiement réussi
+    PaymentPending --> PaymentFailed: Échec paiement
+    PaymentPending --> AdminReview: Timeout
+    
+    PaymentFailed --> PaymentPending: Nouvelle tentative (< 3)
+    PaymentFailed --> Pending: Sélection nouveau gagnant (≥ 3)
+    PaymentFailed --> Failed: Aucun autre gagnant
+    
+    PaymentSuccessful --> RewardsTransferred: Attribution récompenses
+    RewardsTransferred --> Completed: Finalisation complète
+    
+    AdminReview --> Pending: Admin résolution
+    AdminReview --> PaymentSuccessful: Admin skip paiement
+    AdminReview --> Failed: Admin marque échec
+    
+    Failed --> [*]
+    Completed --> [*]

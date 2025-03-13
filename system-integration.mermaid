@@ -1,0 +1,98 @@
+flowchart TD
+    subgraph Frontend[Frontend]
+        direction TB
+        WebApp[Plateforme Web React]
+        MobileApp[Application Mobile React Native]
+    end
+
+    subgraph Backend[Backend Services]
+        direction TB
+        API[API Express]
+        Socket[Service Socket.IO]
+        AuctionService[Service d'Enchères]
+        UserService[Service Utilisateurs]
+        CertificateService[Service Certificats]
+        NGOService[Service ONG]
+        AdminService[Service Admin]
+        EventService[Service d'Événements]
+        NotificationService[Service de Notifications]
+    end
+
+    subgraph Storage[Stockage]
+        MongoDB[(Base de données MongoDB)]
+        FileStorage[Stockage de Fichiers]
+    end
+
+    subgraph Blockchain[Infrastructure Blockchain]
+        ContractNFT[Smart Contract NFT]
+        TokenContract[Smart Contract Token]
+        IPFS[Stockage IPFS]
+        PolygonNode[Nœud Polygon/Tezos]
+    end
+
+    subgraph External[Services Externes]
+        AIImageGen[Service Génération d'Images IA]
+        EmailService[Service Email]
+        SMSService[Service SMS]
+        PaymentGateway[Passerelle de Paiement]
+    end
+
+    %% Connexions Frontend
+    WebApp <--> API
+    MobileApp <--> API
+    WebApp <--> Socket
+    MobileApp <--> Socket
+
+    %% Connexions Backend
+    API --> AuctionService
+    API --> UserService
+    API --> CertificateService
+    API --> NGOService
+    API --> AdminService
+    API --> EventService
+    API --> NotificationService
+    
+    Socket <--> EventService
+    NotificationService --> Socket
+    EventService --> NotificationService
+
+    %% Connexions Storage
+    AuctionService <--> MongoDB
+    UserService <--> MongoDB
+    CertificateService <--> MongoDB
+    NGOService <--> MongoDB
+    AdminService <--> MongoDB
+    EventService <--> MongoDB
+    NotificationService <--> MongoDB
+    
+    CertificateService <--> FileStorage
+    NGOService <--> FileStorage
+    UserService <--> FileStorage
+
+    %% Connexions Blockchain
+    CertificateService <--> ContractNFT
+    CertificateService <--> IPFS
+    ContractNFT <--> PolygonNode
+    TokenContract <--> PolygonNode
+    FileStorage <--> IPFS
+
+    %% Connexions Services Externes
+    CertificateService <--> AIImageGen
+    UserService <--> EmailService
+    UserService <--> SMSService
+    NotificationService <--> EmailService
+    NotificationService <--> SMSService
+    AuctionService <--> PaymentGateway
+
+    %% Légende
+    classDef frontendClass fill:#d1f0ee,stroke:#333,stroke-width:1px
+    classDef backendClass fill:#d4f1c5,stroke:#333,stroke-width:1px
+    classDef storageClass fill:#f5e8b3,stroke:#333,stroke-width:1px
+    classDef blockchainClass fill:#e0c5f5,stroke:#333,stroke-width:1px
+    classDef externalClass fill:#f5c5c5,stroke:#333,stroke-width:1px
+    
+    class WebApp,MobileApp frontendClass
+    class API,Socket,AuctionService,UserService,CertificateService,NGOService,AdminService,EventService,NotificationService backendClass
+    class MongoDB,FileStorage storageClass
+    class ContractNFT,TokenContract,IPFS,PolygonNode blockchainClass
+    class AIImageGen,EmailService,SMSService,PaymentGateway externalClass

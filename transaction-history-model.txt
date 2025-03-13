@@ -1,0 +1,216 @@
+// models/TransactionHistory.js
+// Modèle pour l'historique des transactions d'avoirs
+
+const mongoose = require('mongoose');
+
+// Types de transactions
+const TRANSACTION_TYPES = {
+  SPEND: 'spend',           // Utilisation d'avoirs
+  DISTRIBUTE: 'distribute',  // Distribution d'avoirs
+  REFUND: 'refund',         // Remboursement
+  TRANSFER: 'transfer',     // Transfert entre utilisateurs
+  ADJUSTMENT: 'adjustment'  // Ajustement administratif
+};
+
+// Statuts de transaction
+const TRANSACTION_STATUS = {
+  PENDING: 'pending',       // En attente
+  COMPLETED: 'completed',   // Terminée avec succès
+  FAILED: 'failed',         // Échouée
+  CANCELLED: 'cancelled'    // Annulée
+};
+
+// Schéma de transaction
+const transactionHistorySchema = new mongoose.Schema({
+  // Liens avec les autres entités
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
+  tokenId: {
+    type: String,
+    required: true,
+    index: true
+  },
+  sectorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Sector',
+    required: true,
+    index: true
+  },
+  sponsorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Company',
+    index: true
+  },
+  
+  // Informations de la transaction
+  amount: {
+    type: Number,
+    required: true
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  transactionType: {
+    type: String,
+    enum: Object.values(TRANSACTION_TYPES),
+    required: true,
+    index: true
+  },
+  status: {
+    type: String,
+    enum: Object.values(TRANSACTION_STATUS),
+    default: TRANSACTION_STATUS.COMPLETED,
+    index: true
+  },
+  
+  // Métadonnées
+  timestamp: {
+    type: Date,
+    default: Date.now,
+    index: true
+  },
+  txHash: String, // Hash de la transaction blockchain
+  nonce: String,  // Nonce unique pour éviter les doublons
+  
+  // Informations supplémentaires
+  metadata: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
+  
+  // Signature de la transaction
+  signature: String,
+  
+  // Informations de validation
+  validatedAt: Date,
+  validatedBy: String,
+  
+  // Informations d'erreur (si applicable)
+  errorCode: String,
+  errorMessage: String
+}, {
+  timestamps: true
+});
+
+// Index composites pour des recherches efficaces
+transactionHistorySchema.index({ userId: 1, timestamp: -1 });
+transactionHistorySchema.index({ sectorId: 1, transactionType: 1 });
+transactionHistorySchema.index({ sponsorId: 1, timestamp: -1 });
+
+// Index pour les recherches temporelles
+transactionHistorySchema.index({ timestamp: -1 });
+
+// Middleware de pré-sauvegarde
+transactionHistorySchema.pre('save', function(next) {
+  // Si le statut n'est pas défini, utiliser COMPLETED par défaut
+  if (!this.status) {
+    this.status = TRANSACTION_STATUS.COMPLETED;
+  }
+  
+  next();
+});
+
+// Méthode pour marquer une transaction comme terminée
+transactionHistorySchema.methods.markAsCompleted = async function(txHash) {
+  this.status = TRANSACTION_STATUS.COMPLETED;
+  this.txHash = txHash;
+  return await this.save();
+};
+
+// Méthode pour marquer une transaction comme échouée
+transactionHistorySchema.methods.markAsFailed = async function(errorCode, errorMessage) {
+  this.status = TRANSACTION_STATUS.FAILED;
+  this.errorCode = errorCode;
+  this.errorMessage = errorMessage;
+  return await this.save();
+};
+
+// Méthode statique pour récupérer les transactions d'un utilisateur
+transactionHistorySchema.statics.getUserTransactions = async function(userId, limit = 50) {
+  return await this.find({ userId })
+    .sort({ timestamp: -1 })
+    .limit(limit)
+    .populate('sectorId')
+    .populate('sponsorId');
+};
+
+// Méthode statique pour récupérer les transactions d'un secteur
+transactionHistorySchema.statics.getSectorTransactions = async function(sectorId, limit = 50) {
+  return await this.find({ sectorId })
+    .sort({ timestamp: -1 })
+    .limit(limit)
+    .populate('userId')
+    .populate('sponsorId');
+};
+
+// Méthode statique pour récupérer les transactions d'un sponsor
+transactionHistorySchema.statics.getSponsorTransactions = async function(sponsorId, limit = 50) {
+  return await this.find({ sponsorId })
+    .sort({ timestamp: -1 })
+    .limit(limit)
+    .populate('userId')
+    .populate('sectorId');
+};
+
+// Méthode statique pour obtenir les statistiques de transactions d'un utilisateur
+transactionHistorySchema.statics.getUserStats = async function(userId) {
+  const stats = await this.aggregate([
+    { $match: { userId: mongoose.Types.ObjectId(userId) } },
+    { $group: {
+        _id: '$transactionType',
+        count: { $sum: 1 },
+        totalAmount: { $sum: '$amount' }
+      }
+    }
+  ]);
+  
+  return stats.reduce((acc, stat) => {
+    acc[stat._id] = {
+      count: stat.count,
+      totalAmount: stat.totalAmount
+    };
+    return acc;
+  }, {});
+};
+
+// Méthode statique pour obtenir le total des dépenses d'un jour spécifique
+transactionHistorySchema.statics.getDailySpending = async function(userId, date) {
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+  
+  const result = await this.aggregate([
+    {
+      $match: {
+        userId: mongoose.Types.ObjectId(userId),
+        timestamp: { $gte: startOfDay, $lte: endOfDay },
+        transactionType: 'spend'
+      }
+    },
+    {
+      $group: {
+        _id: null,
+        totalSpent: { $sum: { $abs: '$amount' } }
+      }
+    }
+  ]);
+  
+  return result.length > 0 ? result[0].totalSpent : 0;
+};
+
+// Créer le modèle à partir du schéma
+const TransactionHistory = mongoose.model('TransactionHistory', transactionHistorySchema);
+
+// Exporter les constantes avec le modèle
+module.exports = {
+  TransactionHistory,
+  TRANSACTION_TYPES,
+  TRANSACTION_STATUS
+};

@@ -1,0 +1,414 @@
+// controllers/sponsorSelectionController.js
+// Contrôleur pour gérer la sélection des sponsors par les utilisateurs
+
+const express = require('express');
+const router = express.Router();
+const { authenticateJWT } = require('../middleware/auth');
+const sponsorSelectionService = require('../services/sponsorSelectionService');
+const treasuryService = require('../services/treasuryService');
+const { unifiedLoyaltyService } = require('../services/unifiedLoyaltyService');
+const transactionDoubleValidator = require('../services/transactionDoubleValidator');
+const { TransactionHistory, TRANSACTION_TYPES } = require('../models/TransactionHistory');
+const { User } = require('../models/User');
+const { Sector } = require('../models/Sector');
+const { Company } = require('../models/Company');
+const { logError } = require('../utils/errorTracking');
+
+/**
+ * @route GET /api/sponsor-selection/available
+ * @desc Récupère la liste des sponsors disponibles pour l'utilisateur
+ * @access Private
+ */
+router.get('/available', authenticateJWT, async (req, res) => {
+  try {
+    const sponsors = await sponsorSelectionService.getAvailableSponsors(req.user.id);
+    
+    res.json({
+      success: true,
+      count: sponsors.length,
+      sponsors
+    });
+  } catch (error) {
+    logError('Error fetching available sponsors', error);
+    res.status(500).json({ error: 'Failed to fetch available sponsors' });
+  }
+});
+
+/**
+ * @route GET /api/sponsor-selection/sector/:sectorId/sponsors
+ * @desc Récupère les sponsors disponibles pour un secteur spécifique
+ * @access Private
+ */
+router.get('/sector/:sectorId/sponsors', authenticateJWT, async (req, res) => {
+  try {
+    // Vérifier que le secteur existe
+    const sector = await Sector.findById(req.params.sectorId);
+    
+    if (!sector) {
+      return res.status(404).json({ error: 'Sector not found' });
+    }
+    
+    // Récupérer les informations du sponsor actuel
+    const sponsorInfo = await treasuryService.getSponsorInfo(req.params.sectorId);
+    
+    if (!sponsorInfo || !sponsorInfo.active) {
+      return res.status(404).json({ error: 'No active sponsor for this sector' });
+    }
+    
+    // Récupérer les détails de l'entreprise
+    const company = await Company.findOne({ walletAddress: sponsorInfo.sponsorAddress });
+    
+    if (!company) {
+      return res.status(404).json({ error: 'Sponsor company not found' });
+    }
+    
+    // Récupérer les offres du sponsor
+    const offers = await sponsorSelectionService._getSponsorOffers(company._id);
+    
+    // Vérifier si l'utilisateur a ce sponsor en favori
+    const user = await User.findById(req.user.id);
+    const isFavorite = user.favoriteSponsors && user.favoriteSponsors.includes(company._id.toString());
+    
+    res.json({
+      success: true,
+      sector: {
+        id: sector._id,
+        name: sector.name,
+        description: sector.description,
+        icon: sector.icon,
+        color: sector.color
+      },
+      sponsor: {
+        id: company._id,
+        name: company.name,
+        description: company.description,
+        logo: company.logo,
+        industry: company.industry,
+        remainingFunds: sponsorInfo.remainingFunds,
+        sponsorshipStart: sponsorInfo.startTime,
+        sponsorshipEnd: sponsorInfo.endTime,
+        isFavorite,
+        offers
+      }
+    });
+  } catch (error) {
+    logError(`Error fetching sponsors for sector ${req.params.sectorId}`, error);
+    res.status(500).json({ error: 'Failed to fetch sector sponsors' });
+  }
+});
+
+/**
+ * @route POST /api/sponsor-selection/spend
+ * @desc Dépense des avoirs auprès d'un sponsor sélectionné
+ * @access Private
+ */
+router.post('/spend', authenticateJWT, async (req, res) => {
+  try {
+    // Valider les données d'entrée
+    const { sectorId, sponsorId, amount, description } = req.body;
+    
+    if (!sectorId || !sponsorId || !amount) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Récupérer l'utilisateur
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (!user.tokenId) {
+      return res.status(400).json({ error: 'User has no loyalty card' });
+    }
+    
+    // Récupérer le sponsor
+    const company = await Company.findById(sponsorId);
+    
+    if (!company) {
+      return res.status(404).json({ error: 'Sponsor not found' });
+    }
+    
+    // Pré-valider la transaction
+    const preValidation = await transactionDoubleValidator.preValidateTransaction(
+      {
+        type: 'spendBalance',
+        userId: req.user.id,
+        tokenId: user.tokenId,
+        sectorId,
+        sponsorId,
+        amount
+      },
+      req.user.id
+    );
+    
+    if (!preValidation.success) {
+      return res.status(400).json({ error: preValidation.error });
+    }
+    
+    // Dépenser les avoirs
+    try {
+      const spendResult = await sponsorSelectionService.spendTokenWithSponsor(
+        req.user.id,
+        user.tokenId,
+        sectorId,
+        sponsorId,
+        amount,
+        description,
+        preValidation.nonce
+      );
+      
+      // Post-valider la transaction
+      if (spendResult.txHash) {
+        transactionDoubleValidator.postValidateTransaction(
+          preValidation.nonce,
+          spendResult.txHash
+        ).catch(error => {
+          logError(`Error post-validating transaction ${spendResult.txHash}`, error);
+        });
+      }
+      
+      res.json({
+        success: true,
+        transactionId: spendResult.transactionId,
+        amount,
+        newBalance: spendResult.newBalance,
+        txHash: spendResult.txHash,
+        nonce: preValidation.nonce
+      });
+    } catch (error) {
+      // Enregistrer l'échec de la transaction
+      const failedTransaction = new TransactionHistory({
+        userId: req.user.id,
+        tokenId: user.tokenId,
+        sectorId,
+        sponsorId,
+        amount: -amount, // Négatif car c'est une dépense
+        description: description || 'Tentative d\'utilisation d\'avoirs',
+        transactionType: TRANSACTION_TYPES.SPEND,
+        status: 'failed',
+        nonce: preValidation.nonce,
+        errorMessage: error.message
+      });
+      
+      await failedTransaction.save();
+      
+      throw error;
+    }
+  } catch (error) {
+    logError('Error spending token with sponsor', error);
+    res.status(500).json({ error: `Failed to spend token: ${error.message}` });
+  }
+});
+
+/**
+ * @route POST /api/sponsor-selection/favorites/add/:sponsorId
+ * @desc Ajoute un sponsor aux favoris
+ * @access Private
+ */
+router.post('/favorites/add/:sponsorId', authenticateJWT, async (req, res) => {
+  try {
+    const result = await sponsorSelectionService.addSponsorToFavorites(
+      req.user.id,
+      req.params.sponsorId
+    );
+    
+    if (!result) {
+      return res.status(400).json({ error: 'Failed to add sponsor to favorites' });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Sponsor added to favorites'
+    });
+  } catch (error) {
+    logError('Error adding sponsor to favorites', error);
+    res.status(500).json({ error: 'Failed to add sponsor to favorites' });
+  }
+});
+
+/**
+ * @route POST /api/sponsor-selection/favorites/remove/:sponsorId
+ * @desc Retire un sponsor des favoris
+ * @access Private
+ */
+router.post('/favorites/remove/:sponsorId', authenticateJWT, async (req, res) => {
+  try {
+    const result = await sponsorSelectionService.removeSponsorFromFavorites(
+      req.user.id,
+      req.params.sponsorId
+    );
+    
+    if (!result) {
+      return res.status(400).json({ error: 'Failed to remove sponsor from favorites' });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Sponsor removed from favorites'
+    });
+  } catch (error) {
+    logError('Error removing sponsor from favorites', error);
+    res.status(500).json({ error: 'Failed to remove sponsor from favorites' });
+  }
+});
+
+/**
+ * @route GET /api/sponsor-selection/transactions
+ * @desc Récupère l'historique des transactions avec les sponsors
+ * @access Private
+ */
+router.get('/transactions', authenticateJWT, async (req, res) => {
+  try {
+    // Paramètre optionnel de filtrage par sponsor
+    const sponsorId = req.query.sponsorId;
+    
+    const transactions = await sponsorSelectionService.getUserSponsorTransactions(
+      req.user.id,
+      sponsorId
+    );
+    
+    res.json({
+      success: true,
+      count: transactions.length,
+      transactions
+    });
+  } catch (error) {
+    logError('Error fetching user-sponsor transactions', error);
+    res.status(500).json({ error: 'Failed to fetch transactions' });
+  }
+});
+
+/**
+ * @route GET /api/sponsor-selection/compare
+ * @desc Compare les offres de plusieurs sponsors
+ * @access Private
+ */
+router.get('/compare', authenticateJWT, async (req, res) => {
+  try {
+    // Récupérer les IDs des sponsors à comparer
+    const sponsorIds = req.query.ids ? req.query.ids.split(',') : [];
+    
+    if (sponsorIds.length === 0) {
+      return res.status(400).json({ error: 'No sponsor IDs provided' });
+    }
+    
+    // Récupérer les informations des sponsors
+    const sponsors = await Promise.all(
+      sponsorIds.map(async (sponsorId) => {
+        try {
+          const company = await Company.findById(sponsorId);
+          
+          if (!company) {
+            return null;
+          }
+          
+          // Récupérer les secteurs sponsorisés
+          const sponsoredSectors = await treasuryService.getSponsoredSectors();
+          const companySectors = sponsoredSectors
+            .filter(s => s.sponsor && s.sponsor.company && s.sponsor.company.id === sponsorId)
+            .map(s => ({
+              id: s.sectorId,
+              name: s.name,
+              remainingFunds: s.sponsor.remainingFunds
+            }));
+          
+          // Récupérer les offres
+          const offers = await sponsorSelectionService._getSponsorOffers(sponsorId);
+          
+          // Vérifier si l'utilisateur a ce sponsor en favori
+          const user = await User.findById(req.user.id);
+          const isFavorite = user.favoriteSponsors && user.favoriteSponsors.includes(sponsorId);
+          
+          return {
+            id: company._id,
+            name: company.name,
+            logo: company.logo,
+            description: company.description,
+            industry: company.industry,
+            sectors: companySectors,
+            offers,
+            isFavorite
+          };
+        } catch (error) {
+          logError(`Error fetching sponsor details for ${sponsorId}`, error);
+          return null;
+        }
+      })
+    );
+    
+    // Filtrer les sponsors null (non trouvés)
+    const validSponsors = sponsors.filter(s => s !== null);
+    
+    res.json({
+      success: true,
+      count: validSponsors.length,
+      sponsors: validSponsors
+    });
+  } catch (error) {
+    logError('Error comparing sponsors', error);
+    res.status(500).json({ error: 'Failed to compare sponsors' });
+  }
+});
+
+/**
+ * @route GET /api/sponsor-selection/payment-options/:sponsorId
+ * @desc Récupère les options de paiement disponibles pour un sponsor
+ * @access Private
+ */
+router.get('/payment-options/:sponsorId', authenticateJWT, async (req, res) => {
+  try {
+    // Récupérer le sponsor
+    const company = await Company.findById(req.params.sponsorId);
+    
+    if (!company) {
+      return res.status(404).json({ error: 'Sponsor not found' });
+    }
+    
+    // Récupérer l'utilisateur
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (!user.tokenId) {
+      return res.status(400).json({ error: 'User has no loyalty card' });
+    }
+    
+    // Récupérer les détails du token
+    const tokenDetails = await unifiedLoyaltyService.getCardDetails(user.tokenId);
+    
+    if (!tokenDetails) {
+      return res.status(404).json({ error: 'Loyalty card not found' });
+    }
+    
+    // Récupérer les secteurs que ce sponsor sponsorise
+    const sponsoredSectors = await treasuryService.getSponsoredSectors();
+    const companySectors = sponsoredSectors
+      .filter(s => s.sponsor && 
+                   s.sponsor.company && 
+                   s.sponsor.company.id === req.params.sponsorId)
+      .map(s => ({
+        id: s.sectorId,
+        name: s.name,
+        availableBalance: tokenDetails.balances[s.sectorId]?.balance || 0,
+        sponsorRemainingFunds: s.sponsor.remainingFunds
+      }));
+    
+    res.json({
+      success: true,
+      sponsor: {
+        id: company._id,
+        name: company.name,
+        logo: company.logo
+      },
+      paymentOptions: companySectors
+    });
+  } catch (error) {
+    logError(`Error fetching payment options for sponsor ${req.params.sponsorId}`, error);
+    res.status(500).json({ error: 'Failed to fetch payment options' });
+  }
+});
+
+module.exports = router;

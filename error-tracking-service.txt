@@ -1,0 +1,190 @@
+// utils/errorTracking.js
+// Service de suivi et gestion des erreurs pour l'application Étika
+
+import { Platform } from 'react-native';
+import * as Device from 'expo-device';
+import * as Application from 'expo-application';
+import { getSecureItem, STORAGE_KEYS } from './secureStorage';
+
+// Configuration
+const MAX_ERRORS_STORED = 50;
+const SHOULD_REPORT_REMOTELY = true; // À désactiver en développement
+
+// État local pour le suivi des erreurs
+let errorHistory = [];
+let isInitialized = false;
+
+/**
+ * Initialise le service de suivi des erreurs
+ */
+export function initErrorTracking() {
+  if (isInitialized) return;
+  
+  // Intercepter les erreurs non capturées
+  const originalErrorHandler = global.ErrorUtils.getGlobalHandler();
+  
+  global.ErrorUtils.setGlobalHandler((error, isFatal) => {
+    // Enregistrer l'erreur
+    logError('Uncaught global error', error, { isFatal });
+    
+    // Appeler le gestionnaire d'erreur d'origine
+    originalErrorHandler(error, isFatal);
+  });
+  
+  // Pour les erreurs de promesses non gérées
+  global.Promise.prototype.then = enhancePromise(global.Promise.prototype.then);
+  global.Promise.prototype.catch = enhancePromise(global.Promise.prototype.catch);
+  
+  isInitialized = true;
+  console.log('Error tracking initialized');
+}
+
+/**
+ * Améliore les méthodes de Promise pour capturer les rejets non gérés
+ * @param {Function} originalMethod - Méthode originale de Promise
+ * @returns {Function} - Fonction améliorée
+ */
+function enhancePromise(originalMethod) {
+  return function() {
+    return originalMethod.apply(this, arguments).catch(error => {
+      logError('Unhandled promise rejection', error);
+      return Promise.reject(error); // Re-jeter pour préserver le comportement d'origine
+    });
+  };
+}
+
+/**
+ * Enregistre une erreur dans le système de suivi
+ * @param {string} message - Message décrivant l'erreur
+ * @param {Error|Object} error - Objet d'erreur ou données supplémentaires
+ * @param {Object} extras - Informations supplémentaires
+ */
+export function logError(message, error, extras = {}) {
+  try {
+    // Formatage de base de l'erreur
+    const formattedError = {
+      timestamp: new Date().toISOString(),
+      message: message || 'Unknown error',
+      stack: error?.stack || null,
+      componentName: extras?.componentName || null,
+      code: error?.code || null,
+      isFatal: extras?.isFatal || false,
+      details: error?.message || (typeof error === 'string' ? error : JSON.stringify(error)),
+      ...extras
+    };
+    
+    // Enregistrer l'erreur localement
+    console.error(`[ERROR] ${message}`, error);
+    errorHistory.unshift(formattedError);
+    
+    // Limiter la taille de l'historique
+    if (errorHistory.length > MAX_ERRORS_STORED) {
+      errorHistory = errorHistory.slice(0, MAX_ERRORS_STORED);
+    }
+    
+    // Envoyer l'erreur au serveur (si actif)
+    if (SHOULD_REPORT_REMOTELY) {
+      reportErrorToServer(formattedError);
+    }
+  } catch (e) {
+    // Fallback en cas d'erreur dans le gestionnaire d'erreur
+    console.error('Error in error tracking system:', e);
+  }
+}
+
+/**
+ * Récupère les détails de l'appareil pour le rapport d'erreur
+ * @returns {Promise<Object>} - Informations sur l'appareil
+ */
+async function getDeviceDetails() {
+  try {
+    const deviceInfo = {
+      platform: Platform.OS,
+      platformVersion: Platform.Version,
+      device: Device.deviceName || 'Unknown',
+      isDevice: Device.isDevice,
+      appVersion: Application.nativeApplicationVersion || 'Unknown',
+      appBuildNumber: Application.nativeBuildVersion || 'Unknown'
+    };
+    
+    // Ajouter des informations de l'utilisateur si connecté
+    const userInfo = await getSecureItem(STORAGE_KEYS.USER_INFO);
+    if (userInfo) {
+      deviceInfo.userId = userInfo.id;
+      deviceInfo.userRole = userInfo.role;
+      // Ne pas inclure d'informations sensibles comme l'email
+    }
+    
+    return deviceInfo;
+  } catch (e) {
+    return {
+      platform: Platform.OS,
+      error: 'Could not get device details'
+    };
+  }
+}
+
+/**
+ * Envoie un rapport d'erreur au serveur
+ * @param {Object} errorData - Données d'erreur formatées
+ */
+async function reportErrorToServer(errorData) {
+  try {
+    const deviceDetails = await getDeviceDetails();
+    const token = await getSecureItem(STORAGE_KEYS.AUTH_TOKEN);
+    
+    const fullReport = {
+      ...errorData,
+      device: deviceDetails,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Envoyer au serveur d'analyse d'erreurs
+    fetch(`${API_URL}/api/error-reports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : undefined
+      },
+      body: JSON.stringify(fullReport)
+    }).catch(e => {
+      // Silencieux en cas d'échec - ne pas créer de boucle d'erreurs
+      console.log('Failed to send error report:', e.message);
+    });
+  } catch (e) {
+    // Silencieux en cas d'échec
+    console.log('Error in reportErrorToServer:', e.message);
+  }
+}
+
+/**
+ * Récupère l'historique des erreurs récentes
+ * @returns {Array} - Liste des erreurs récentes
+ */
+export function getErrorHistory() {
+  return [...errorHistory];
+}
+
+/**
+ * Efface l'historique des erreurs
+ */
+export function clearErrorHistory() {
+  errorHistory = [];
+}
+
+/**
+ * Crée un wrapper pour les fonctions asynchrones pour capturer automatiquement les erreurs
+ * @param {Function} asyncFunction - Fonction asynchrone à wrapper
+ * @param {string} functionName - Nom de la fonction pour le rapport d'erreur
+ * @returns {Function} - Fonction wrappée avec gestion d'erreurs
+ */
+export function withErrorHandling(asyncFunction, functionName) {
+  return async (...args) => {
+    try {
+      return await asyncFunction(...args);
+    } catch (error) {
+      logError(`Error in ${functionName}`, error);
+      throw error; // Re-jeter l'erreur pour que l'appelant puisse la gérer
+    }
+  };
+}

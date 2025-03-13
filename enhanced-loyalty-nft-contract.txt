@@ -1,0 +1,621 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.9;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+/// @title EnhancedLoyaltyNFT - Super carte de fidélité blockchain pour Etika
+/// @notice Ce contrat gère les NFTs uniques pour consommateurs et professionnels
+contract EnhancedLoyaltyNFT is ERC721, ERC721Enumerable, ERC721URIStorage, AccessControl, Pausable {
+    using Counters for Counters.Counter;
+
+    // Rôles pour la gestion des autorisations
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant SPONSOR_ROLE = keccak256("SPONSOR_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+
+    // Types de cartes de fidélité
+    enum CardType { CONSUMER, BUSINESS }
+    
+    Counters.Counter private _tokenIdCounter;
+    
+    // Structure pour stocker les informations sectorielles d'un NFT
+    struct SectorBalance {
+        uint256 balance;      // Solde disponible pour ce secteur
+        uint256 totalEarned;  // Total reçu dans ce secteur
+        uint256 totalSpent;   // Total dépensé dans ce secteur
+        uint256 lastActivity; // Timestamp de la dernière activité
+    }
+    
+    // Structure pour stocker les informations sur un secteur
+    struct Sector {
+        string name;
+        string description;
+        address sponsorAddress; // Adresse du sponsor lauréat pour ce secteur
+        bool active;            // Si le secteur est actif
+        uint256 createdAt;
+    }
+    
+    // Structure pour les informations détaillées d'une carte
+    struct CardInfo {
+        CardType cardType;      // Type de carte (consommateur ou professionnel)
+        string tier;            // Niveau de la carte (standard, silver, gold, platinum)
+        uint256 issuedAt;       // Date d'émission
+        uint256 expiresAt;      // Date d'expiration
+        bool requiresApproval;  // Si les transactions nécessitent une approbation
+        uint256 dailyLimit;     // Limite quotidienne (0 = pas de limite)
+        address businessAddress; // Adresse de l'entreprise (uniquement pour les cartes professionnelles)
+    }
+    
+    // Mapping tokenId => CardInfo
+    mapping(uint256 => CardInfo) private _cardInfo;
+    
+    // Mapping tokenId => sectorId => SectorBalance
+    mapping(uint256 => mapping(uint256 => SectorBalance)) private _sectorBalances;
+    
+    // Mapping utilisateur => a un NFT consommateur
+    mapping(address => bool) private _hasConsumerCard;
+    
+    // Mapping entreprise => a un NFT professionnel
+    mapping(address => bool) private _hasBusinessCard;
+    
+    // Mapping des secteurs par ID
+    mapping(uint256 => Sector) private _sectors;
+    
+    // Liste des IDs de secteurs actifs
+    uint256[] private _activeSectorIds;
+    
+    // Compteur pour les IDs de secteurs
+    Counters.Counter private _sectorIdCounter;
+    
+    // Structure pour les transactions quotidiennes
+    struct DailySpending {
+        uint256 date;    // Date en jours depuis epoch
+        uint256 amount;  // Montant total dépensé ce jour
+    }
+    
+    // Mapping tokenId => dernières dépenses quotidiennes
+    mapping(uint256 => DailySpending) private _dailySpending;
+    
+    // Événements
+    event BalanceAdded(uint256 indexed tokenId, uint256 indexed sectorId, uint256 amount);
+    event BalanceSpent(uint256 indexed tokenId, uint256 indexed sectorId, uint256 amount, address indexed recipient);
+    event SectorAdded(uint256 indexed sectorId, string name, address sponsorAddress);
+    event SectorUpdated(uint256 indexed sectorId, string name, address sponsorAddress, bool active);
+    event CardIssued(address indexed to, uint256 indexed tokenId, CardType cardType);
+    event CardTierUpdated(uint256 indexed tokenId, string oldTier, string newTier);
+    event TransactionRejected(uint256 indexed tokenId, uint256 indexed sectorId, uint256 amount, string reason);
+
+    constructor() ERC721("EtikaLoyaltyCard", "ELC") {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
+        _grantRole(OPERATOR_ROLE, msg.sender);
+    }
+
+    /// @notice Crée un nouveau secteur
+    /// @param name Nom du secteur
+    /// @param description Description du secteur
+    /// @param sponsorAddress Adresse du sponsor lauréat
+    /// @return sectorId ID du nouveau secteur créé
+    function createSector(
+        string memory name,
+        string memory description,
+        address sponsorAddress
+    ) public onlyRole(ADMIN_ROLE) returns (uint256) {
+        _sectorIdCounter.increment();
+        uint256 sectorId = _sectorIdCounter.current();
+        
+        _sectors[sectorId] = Sector({
+            name: name,
+            description: description,
+            sponsorAddress: sponsorAddress,
+            active: true,
+            createdAt: block.timestamp
+        });
+        
+        _activeSectorIds.push(sectorId);
+        
+        // Attribuer le rôle de sponsor à l'adresse du sponsor
+        _grantRole(SPONSOR_ROLE, sponsorAddress);
+        
+        emit SectorAdded(sectorId, name, sponsorAddress);
+        
+        return sectorId;
+    }
+    
+    /// @notice Met à jour les informations d'un secteur existant
+    /// @param sectorId ID du secteur à mettre à jour
+    /// @param name Nouveau nom du secteur
+    /// @param description Nouvelle description
+    /// @param sponsorAddress Nouvelle adresse du sponsor
+    /// @param active Si le secteur est actif ou non
+    function updateSector(
+        uint256 sectorId,
+        string memory name,
+        string memory description,
+        address sponsorAddress,
+        bool active
+    ) public onlyRole(ADMIN_ROLE) {
+        require(_sectors[sectorId].createdAt > 0, "Sector does not exist");
+        
+        // Si le sponsor change, mettre à jour les rôles
+        if (_sectors[sectorId].sponsorAddress != sponsorAddress) {
+            // Révoquer l'ancien sponsor si nécessaire
+            if (!_hasSponsorOtherSectors(_sectors[sectorId].sponsorAddress, sectorId)) {
+                revokeRole(SPONSOR_ROLE, _sectors[sectorId].sponsorAddress);
+            }
+            
+            // Accorder le rôle au nouveau sponsor
+            _grantRole(SPONSOR_ROLE, sponsorAddress);
+        }
+        
+        // Mettre à jour les informations du secteur
+        _sectors[sectorId].name = name;
+        _sectors[sectorId].description = description;
+        _sectors[sectorId].sponsorAddress = sponsorAddress;
+        
+        // Gérer l'activation/désactivation
+        if (_sectors[sectorId].active != active) {
+            _sectors[sectorId].active = active;
+            
+            // Mettre à jour la liste des secteurs actifs
+            if (active) {
+                _activeSectorIds.push(sectorId);
+            } else {
+                _removeFromActiveSectors(sectorId);
+            }
+        }
+        
+        emit SectorUpdated(sectorId, name, sponsorAddress, active);
+    }
+    
+    /// @notice Vérifie si une adresse est sponsor pour d'autres secteurs
+    /// @param sponsorAddress Adresse du sponsor à vérifier
+    /// @param excludeSectorId Secteur à exclure de la vérification
+    /// @return true si l'adresse est sponsor pour d'autres secteurs
+    function _hasSponsorOtherSectors(address sponsorAddress, uint256 excludeSectorId) private view returns (bool) {
+        for (uint256 i = 0; i < _activeSectorIds.length; i++) {
+            uint256 sectorId = _activeSectorIds[i];
+            if (sectorId != excludeSectorId && _sectors[sectorId].sponsorAddress == sponsorAddress) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /// @notice Retire un secteur de la liste des secteurs actifs
+    /// @param sectorId ID du secteur à retirer
+    function _removeFromActiveSectors(uint256 sectorId) private {
+        for (uint256 i = 0; i < _activeSectorIds.length; i++) {
+            if (_activeSectorIds[i] == sectorId) {
+                // Déplacer le dernier élément à la place de celui à supprimer
+                _activeSectorIds[i] = _activeSectorIds[_activeSectorIds.length - 1];
+                // Supprimer le dernier élément
+                _activeSectorIds.pop();
+                break;
+            }
+        }
+    }
+    
+    /// @notice Émet une nouvelle carte de fidélité pour un consommateur
+    /// @param to Adresse du destinataire
+    /// @param metadataURI URI des métadonnées pour le NFT
+    /// @return tokenId ID du token émis
+    function issueConsumerCard(
+        address to, 
+        string memory metadataURI
+    ) 
+        public 
+        onlyRole(OPERATOR_ROLE) 
+        whenNotPaused 
+        returns (uint256) 
+    {
+        require(!_hasConsumerCard[to], "Address already has a consumer card");
+        
+        _tokenIdCounter.increment();
+        uint256 tokenId = _tokenIdCounter.current();
+        
+        _safeMint(to, tokenId);
+        _setTokenURI(tokenId, metadataURI);
+        
+        _hasConsumerCard[to] = true;
+        
+        // Initialiser les informations de la carte
+        _cardInfo[tokenId] = CardInfo({
+            cardType: CardType.CONSUMER,
+            tier: "standard",
+            issuedAt: block.timestamp,
+            expiresAt: block.timestamp + 365 days,
+            requiresApproval: false,
+            dailyLimit: 0, // Pas de limite
+            businessAddress: address(0)
+        });
+        
+        emit CardIssued(to, tokenId, CardType.CONSUMER);
+        
+        return tokenId;
+    }
+    
+    /// @notice Émet une nouvelle carte de fidélité pour une entreprise
+    /// @param to Adresse du destinataire (représentant de l'entreprise)
+    /// @param businessAddress Adresse de l'entreprise
+    /// @param metadataURI URI des métadonnées pour le NFT
+    /// @param requiresApproval Si les transactions nécessitent une approbation
+    /// @param dailyLimit Limite quotidienne (0 = pas de limite)
+    /// @return tokenId ID du token émis
+    function issueBusinessCard(
+        address to,
+        address businessAddress,
+        string memory metadataURI,
+        bool requiresApproval,
+        uint256 dailyLimit
+    ) 
+        public 
+        onlyRole(OPERATOR_ROLE) 
+        whenNotPaused 
+        returns (uint256) 
+    {
+        require(!_hasBusinessCard[businessAddress], "Business already has a card");
+        
+        _tokenIdCounter.increment();
+        uint256 tokenId = _tokenIdCounter.current();
+        
+        _safeMint(to, tokenId);
+        _setTokenURI(tokenId, metadataURI);
+        
+        _hasBusinessCard[businessAddress] = true;
+        
+        // Initialiser les informations de la carte
+        _cardInfo[tokenId] = CardInfo({
+            cardType: CardType.BUSINESS,
+            tier: "standard",
+            issuedAt: block.timestamp,
+            expiresAt: block.timestamp + 365 days,
+            requiresApproval: requiresApproval,
+            dailyLimit: dailyLimit,
+            businessAddress: businessAddress
+        });
+        
+        emit CardIssued(to, tokenId, CardType.BUSINESS);
+        
+        return tokenId;
+    }
+    
+    /// @notice Met à jour le niveau d'une carte
+    /// @param tokenId ID du token
+    /// @param newTier Nouveau niveau
+    function updateCardTier(uint256 tokenId, string memory newTier) 
+        public 
+        onlyRole(OPERATOR_ROLE) 
+        whenNotPaused 
+    {
+        require(_exists(tokenId), "Token does not exist");
+        
+        string memory oldTier = _cardInfo[tokenId].tier;
+        _cardInfo[tokenId].tier = newTier;
+        
+        emit CardTierUpdated(tokenId, oldTier, newTier);
+    }
+    
+    /// @notice Prolonge la validité d'une carte
+    /// @param tokenId ID du token
+    /// @param extensionDays Nombre de jours d'extension
+    function extendCardValidity(uint256 tokenId, uint256 extensionDays) 
+        public 
+        onlyRole(OPERATOR_ROLE) 
+        whenNotPaused 
+    {
+        require(_exists(tokenId), "Token does not exist");
+        require(extensionDays > 0, "Extension must be positive");
+        
+        _cardInfo[tokenId].expiresAt += extensionDays * 1 days;
+    }
+    
+    /// @notice Ajoute des avoirs à un secteur spécifique pour un NFT
+    /// @param tokenId ID du NFT
+    /// @param sectorId ID du secteur
+    /// @param amount Montant à ajouter
+    function addBalance(
+        uint256 tokenId, 
+        uint256 sectorId, 
+        uint256 amount
+    ) 
+        public 
+        onlyRole(OPERATOR_ROLE) 
+        whenNotPaused 
+    {
+        require(_exists(tokenId), "Token does not exist");
+        require(_sectors[sectorId].active, "Sector is not active");
+        require(_cardInfo[tokenId].expiresAt > block.timestamp, "Card has expired");
+        
+        // Mettre à jour le solde
+        _sectorBalances[tokenId][sectorId].balance += amount;
+        _sectorBalances[tokenId][sectorId].totalEarned += amount;
+        _sectorBalances[tokenId][sectorId].lastActivity = block.timestamp;
+        
+        emit BalanceAdded(tokenId, sectorId, amount);
+    }
+    
+    /// @notice Dépense des avoirs d'un secteur spécifique pour un NFT
+    /// @param tokenId ID du NFT
+    /// @param sectorId ID du secteur
+    /// @param amount Montant à dépenser
+    /// @param recipient Adresse du bénéficiaire (généralement le sponsor)
+    function spendBalance(
+        uint256 tokenId, 
+        uint256 sectorId, 
+        uint256 amount,
+        address recipient
+    ) 
+        public 
+        whenNotPaused 
+        returns (bool)
+    {
+        require(_exists(tokenId), "Token does not exist");
+        require(_sectors[sectorId].active, "Sector is not active");
+        require(_sectorBalances[tokenId][sectorId].balance >= amount, "Insufficient balance");
+        require(_cardInfo[tokenId].expiresAt > block.timestamp, "Card has expired");
+        
+        // Vérifier que le sponsor est celui qui appelle la fonction ou un opérateur autorisé
+        require(
+            hasRole(OPERATOR_ROLE, msg.sender) || 
+            _sectors[sectorId].sponsorAddress == msg.sender || 
+            recipient == msg.sender,
+            "Not authorized to spend"
+        );
+        
+        // Pour les cartes professionnelles, vérifier les restrictions supplémentaires
+        if (_cardInfo[tokenId].cardType == CardType.BUSINESS) {
+            // Vérifier si la transaction nécessite une approbation
+            if (_cardInfo[tokenId].requiresApproval && !hasRole(OPERATOR_ROLE, msg.sender)) {
+                emit TransactionRejected(tokenId, sectorId, amount, "Transaction requires approval");
+                return false;
+            }
+            
+            // Vérifier la limite quotidienne si elle est définie
+            if (_cardInfo[tokenId].dailyLimit > 0) {
+                uint256 today = block.timestamp / 1 days;
+                
+                // Réinitialiser le compteur quotidien si c'est un nouveau jour
+                if (_dailySpending[tokenId].date < today) {
+                    _dailySpending[tokenId] = DailySpending({
+                        date: today,
+                        amount: 0
+                    });
+                }
+                
+                // Vérifier si la transaction dépasse la limite quotidienne
+                if (_dailySpending[tokenId].amount + amount > _cardInfo[tokenId].dailyLimit) {
+                    emit TransactionRejected(tokenId, sectorId, amount, "Daily limit exceeded");
+                    return false;
+                }
+                
+                // Mettre à jour les dépenses quotidiennes
+                _dailySpending[tokenId].amount += amount;
+            }
+        }
+        
+        // Mettre à jour le solde
+        _sectorBalances[tokenId][sectorId].balance -= amount;
+        _sectorBalances[tokenId][sectorId].totalSpent += amount;
+        _sectorBalances[tokenId][sectorId].lastActivity = block.timestamp;
+        
+        emit BalanceSpent(tokenId, sectorId, amount, recipient);
+        return true;
+    }
+    
+    /// @notice Obtient le solde pour un secteur spécifique d'un NFT
+    /// @param tokenId ID du NFT
+    /// @param sectorId ID du secteur
+    /// @return balance Solde disponible
+    /// @return totalEarned Total des avoirs reçus
+    /// @return totalSpent Total dépensé
+    /// @return lastActivity Timestamp de la dernière activité
+    function getSectorBalance(uint256 tokenId, uint256 sectorId) 
+        public 
+        view 
+        returns (uint256 balance, uint256 totalEarned, uint256 totalSpent, uint256 lastActivity) 
+    {
+        require(_exists(tokenId), "Token does not exist");
+        
+        SectorBalance memory sb = _sectorBalances[tokenId][sectorId];
+        return (sb.balance, sb.totalEarned, sb.totalSpent, sb.lastActivity);
+    }
+    
+    /// @notice Obtient les informations d'une carte
+    /// @param tokenId ID du token
+    /// @return cardType Type de carte (consommateur ou professionnel)
+    /// @return tier Niveau de la carte
+    /// @return issuedAt Date d'émission
+    /// @return expiresAt Date d'expiration
+    /// @return requiresApproval Si les transactions nécessitent une approbation
+    /// @return dailyLimit Limite quotidienne
+    /// @return businessAddress Adresse de l'entreprise (pour les cartes professionnelles)
+    function getCardInfo(uint256 tokenId) 
+        public 
+        view 
+        returns (
+            CardType cardType,
+            string memory tier,
+            uint256 issuedAt,
+            uint256 expiresAt,
+            bool requiresApproval,
+            uint256 dailyLimit,
+            address businessAddress
+        ) 
+    {
+        require(_exists(tokenId), "Token does not exist");
+        
+        CardInfo memory card = _cardInfo[tokenId];
+        return (
+            card.cardType,
+            card.tier,
+            card.issuedAt,
+            card.expiresAt,
+            card.requiresApproval,
+            card.dailyLimit,
+            card.businessAddress
+        );
+    }
+    
+    /// @notice Obtient les informations d'un secteur
+    /// @param sectorId ID du secteur
+    /// @return name Nom du secteur
+    /// @return description Description du secteur
+    /// @return sponsorAddress Adresse du sponsor lauréat
+    /// @return active Si le secteur est actif
+    /// @return createdAt Timestamp de création du secteur
+    function getSectorInfo(uint256 sectorId) 
+        public 
+        view 
+        returns (
+            string memory name,
+            string memory description,
+            address sponsorAddress,
+            bool active,
+            uint256 createdAt
+        ) 
+    {
+        Sector memory sector = _sectors[sectorId];
+        return (
+            sector.name,
+            sector.description,
+            sector.sponsorAddress,
+            sector.active,
+            sector.createdAt
+        );
+    }
+    
+    /// @notice Obtient tous les secteurs actifs
+    /// @return sectorIds Liste des IDs de secteurs actifs
+    function getActiveSectors() public view returns (uint256[] memory) {
+        return _activeSectorIds;
+    }
+    
+    /// @notice Vérifie si une adresse possède déjà une carte de fidélité consommateur
+    /// @param owner Adresse à vérifier
+    /// @return true si l'adresse possède une carte de fidélité consommateur
+    function hasConsumerCard(address owner) public view returns (bool) {
+        return _hasConsumerCard[owner];
+    }
+    
+    /// @notice Vérifie si une entreprise possède déjà une carte de fidélité professionnelle
+    /// @param businessAddress Adresse de l'entreprise à vérifier
+    /// @return true si l'entreprise possède une carte de fidélité professionnelle
+    function hasBusinessCard(address businessAddress) public view returns (bool) {
+        return _hasBusinessCard[businessAddress];
+    }
+    
+    /// @notice Obtient l'ID du token pour un propriétaire (s'il en possède un)
+    /// @param owner Adresse du propriétaire
+    /// @return tokenId ID du token ou 0 si aucun
+    function getTokenIdForOwner(address owner) public view returns (uint256) {
+        uint256 balance = balanceOf(owner);
+        if (balance == 0) {
+            return 0;
+        }
+        
+        // Retourne le premier token trouvé (normalement un utilisateur n'en a qu'un)
+        return tokenOfOwnerByIndex(owner, 0);
+    }
+    
+    /// @notice Récupère la dépense quotidienne d'une carte
+    /// @param tokenId ID du token
+    /// @return date Date en jours depuis epoch
+    /// @return amount Montant total dépensé ce jour
+    function getDailySpending(uint256 tokenId) 
+        public 
+        view 
+        returns (uint256 date, uint256 amount) 
+    {
+        require(_exists(tokenId), "Token does not exist");
+        
+        uint256 today = block.timestamp / 1 days;
+        
+        // Si la date enregistrée n'est pas aujourd'hui, les dépenses sont à 0
+        if (_dailySpending[tokenId].date < today) {
+            return (today, 0);
+        }
+        
+        return (_dailySpending[tokenId].date, _dailySpending[tokenId].amount);
+    }
+    
+    /// @notice Met le contrat en pause
+    function pause() public onlyRole(ADMIN_ROLE) {
+        _pause();
+    }
+    
+    /// @notice Redémarre le contrat après une pause
+    function unpause() public onlyRole(ADMIN_ROLE) {
+        _unpause();
+    }
+    
+    // Fonctions requises par les contrats hérités
+    
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize)
+        internal
+        override(ERC721, ERC721Enumerable)
+        whenNotPaused
+    {
+        // Si ce n'est pas un mint (from != 0), alors mettre à jour les mappings
+        if (from != address(0)) {
+            CardInfo memory card = _cardInfo[tokenId];
+            
+            if (card.cardType == CardType.CONSUMER) {
+                _hasConsumerCard[from] = false;
+            } else {
+                _hasBusinessCard[card.businessAddress] = false;
+            }
+        }
+        
+        if (to != address(0)) {
+            CardInfo memory card = _cardInfo[tokenId];
+            
+            if (card.cardType == CardType.CONSUMER) {
+                // S'assurer que le destinataire n'a pas déjà une carte consommateur
+                require(!_hasConsumerCard[to], "Recipient already has a consumer card");
+                _hasConsumerCard[to] = true;
+            } else {
+                // Pour les cartes professionnelles, pas besoin de vérifier le destinataire
+                // car businessAddress reste inchangée
+            }
+        }
+        
+        super._beforeTokenTransfer(from, to, tokenId, batchSize);
+    }
+    
+    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
+        address owner = ownerOf(tokenId);
+        CardInfo memory card = _cardInfo[tokenId];
+        
+        if (card.cardType == CardType.CONSUMER) {
+            _hasConsumerCard[owner] = false;
+        } else {
+            _hasBusinessCard[card.businessAddress] = false;
+        }
+        
+        super._burn(tokenId);
+    }
+    
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override(ERC721, ERC721URIStorage)
+        returns (string memory)
+    {
+        return super.tokenURI(tokenId);
+    }
+    
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721, ERC721Enumerable, AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
+}

@@ -1,0 +1,620 @@
+// services/auctionService.js
+// Service amélioré pour gérer les enchères et la gestion des sponsors par secteur
+
+const { Auction } = require('../models/Auction');
+const { Sector } = require('../models/Sector');
+const { Company } = require('../models/Company');
+const { Bid } = require('../models/Bid');
+const treasuryService = require('./treasuryService');
+const { logError } = require('../utils/errorTracking');
+
+class AuctionService {
+  /**
+   * Crée une nouvelle enchère pour un ou plusieurs secteurs
+   * @param {Object} auctionData - Données de l'enchère
+   * @param {Array} sectorIds - Liste des IDs de secteurs
+   * @returns {Promise<Object>} - L'enchère créée
+   */
+  async createAuction(auctionData, sectorIds) {
+    try {
+      // Vérifier que les secteurs existent
+      const sectors = await Sector.find({ _id: { $in: sectorIds } });
+      if (sectors.length !== sectorIds.length) {
+        throw new Error('Some sectors were not found');
+      }
+      
+      // Créer l'enchère
+      const auction = new Auction({
+        title: auctionData.title,
+        description: auctionData.description,
+        startTime: auctionData.startTime,
+        endTime: auctionData.endTime,
+        status: 'upcoming',
+        minimumBid: auctionData.minimumBid,
+        bidIncrement: auctionData.bidIncrement,
+        sectors: sectorIds,
+        contractDuration: auctionData.contractDuration || 90, // Default 90 days
+        currency: auctionData.currency || 'MATIC'
+      });
+      
+      await auction.save();
+      
+      // Mettre à jour les secteurs avec l'ID de l'enchère en cours
+      for (const sector of sectors) {
+        sector.currentAuction = auction._id;
+        sector.status = 'pending';
+        await sector.save();
+      }
+      
+      return auction;
+    } catch (error) {
+      logError('Error creating auction', error);
+      throw new Error(`Failed to create auction: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Récupère les enchères actives
+   * @returns {Promise<Array>} - Liste des enchères actives
+   */
+  async getActiveAuctions() {
+    try {
+      const currentDate = new Date();
+      
+      const auctions = await Auction.find({
+        startTime: { $lte: currentDate },
+        endTime: { $gte: currentDate },
+        status: 'active'
+      }).populate('sectors');
+      
+      return auctions;
+    } catch (error) {
+      logError('Error getting active auctions', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Récupère les détails d'une enchère avec les offres par secteur
+   * @param {string} auctionId - ID de l'enchère
+   * @returns {Promise<Object>} - Détails de l'enchère
+   */
+  async getAuctionDetails(auctionId) {
+    try {
+      const auction = await Auction.findById(auctionId).populate('sectors');
+      
+      if (!auction) {
+        throw new Error(`Auction ${auctionId} not found`);
+      }
+      
+      // Récupérer les offres les plus élevées pour chaque secteur
+      const sectorBids = await Promise.all(
+        auction.sectors.map(async (sector) => {
+          const highestBid = await Bid.findOne({
+            auctionId: auction._id,
+            sectorId: sector._id
+          }).sort({ amount: -1 }).populate('companyId');
+          
+          const allBids = await Bid.find({
+            auctionId: auction._id,
+            sectorId: sector._id
+          }).sort({ amount: -1 }).populate('companyId');
+          
+          return {
+            sectorId: sector._id,
+            sectorName: sector.name,
+            description: sector.description,
+            icon: sector.icon,
+            color: sector.color,
+            highestBid: highestBid ? {
+              amount: highestBid.amount,
+              company: {
+                id: highestBid.companyId._id,
+                name: highestBid.companyId.name,
+                logo: highestBid.companyId.logo
+              },
+              timestamp: highestBid.timestamp
+            } : null,
+            bidCount: allBids.length,
+            minimumBid: auction.minimumBid,
+            bidIncrement: auction.bidIncrement
+          };
+        })
+      );
+      
+      return {
+        id: auction._id,
+        title: auction.title,
+        description: auction.description,
+        startTime: auction.startTime,
+        endTime: auction.endTime,
+        status: auction.status,
+        contractDuration: auction.contractDuration,
+        currency: auction.currency,
+        sectorBids: sectorBids,
+        timeRemaining: auction.endTime > new Date() ? 
+          auction.endTime.getTime() - new Date().getTime() : 0
+      };
+    } catch (error) {
+      logError(`Error getting auction details for ${auctionId}`, error);
+      throw new Error(`Failed to get auction details: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Place une enchère pour une entreprise sur un secteur
+   * @param {string} auctionId - ID de l'enchère
+   * @param {string} sectorId - ID du secteur
+   * @param {string} companyId - ID de l'entreprise
+   * @param {number} amount - Montant de l'enchère
+   * @returns {Promise<Object>} - Résultat de l'enchère
+   */
+  async placeBid(auctionId, sectorId, companyId, amount) {
+    try {
+      // Vérifier que l'enchère existe et est active
+      const auction = await Auction.findById(auctionId);
+      
+      if (!auction) {
+        throw new Error(`Auction ${auctionId} not found`);
+      }
+      
+      if (auction.status !== 'active') {
+        throw new Error(`Auction ${auctionId} is not active`);
+      }
+      
+      if (auction.endTime < new Date()) {
+        throw new Error(`Auction ${auctionId} has ended`);
+      }
+      
+      // Vérifier que le secteur fait partie de l'enchère
+      if (!auction.sectors.includes(sectorId)) {
+        throw new Error(`Sector ${sectorId} is not part of auction ${auctionId}`);
+      }
+      
+      // Vérifier que l'entreprise existe
+      const company = await Company.findById(companyId);
+      
+      if (!company) {
+        throw new Error(`Company ${companyId} not found`);
+      }
+      
+      // Vérifier que l'entreprise a le droit de participer aux enchères
+      if (!company.isEligibleForAuction()) {
+        throw new Error(`Company ${companyId} is not eligible for auctions`);
+      }
+      
+      // Vérifier le montant minimum de l'enchère
+      if (amount < auction.minimumBid) {
+        throw new Error(`Bid amount must be at least ${auction.minimumBid}`);
+      }
+      
+      // Récupérer l'enchère la plus élevée pour ce secteur
+      const highestBid = await Bid.findOne({
+        auctionId: auctionId,
+        sectorId: sectorId
+      }).sort({ amount: -1 });
+      
+      // Vérifier que l'enchère est suffisamment élevée par rapport à la précédente
+      if (highestBid) {
+        const minimumAmount = highestBid.amount + auction.bidIncrement;
+        
+        if (amount < minimumAmount) {
+          throw new Error(`Bid amount must be at least ${minimumAmount}`);
+        }
+      }
+      
+      // Créer l'enchère
+      const bid = new Bid({
+        auctionId: auctionId,
+        sectorId: sectorId,
+        companyId: companyId,
+        amount: amount,
+        timestamp: new Date()
+      });
+      
+      await bid.save();
+      
+      // Mettre à jour l'entreprise
+      if (!company.participatingAuctions) {
+        company.participatingAuctions = [];
+      }
+      
+      // Vérifier si l'entreprise participe déjà à cette enchère pour ce secteur
+      const participationIndex = company.participatingAuctions.findIndex(
+        p => p.auctionId.toString() === auctionId.toString() && 
+             p.sectorId.toString() === sectorId.toString()
+      );
+      
+      if (participationIndex >= 0) {
+        // Mettre à jour la participation existante
+        company.participatingAuctions[participationIndex].bidAmount = amount;
+        company.participatingAuctions[participationIndex].bidTime = new Date();
+        company.participatingAuctions[participationIndex].status = 'participating';
+      } else {
+        // Ajouter une nouvelle participation
+        company.participatingAuctions.push({
+          auctionId: auctionId,
+          sectorId: sectorId,
+          bidAmount: amount,
+          bidTime: new Date(),
+          status: 'participating'
+        });
+      }
+      
+      await company.save();
+      
+      return {
+        id: bid._id,
+        amount: bid.amount,
+        timestamp: bid.timestamp,
+        isHighestBid: !highestBid || bid.amount > highestBid.amount
+      };
+    } catch (error) {
+      logError('Error placing bid', error);
+      throw new Error(`Failed to place bid: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Finalise une enchère et détermine les gagnants par secteur
+   * @param {string} auctionId - ID de l'enchère
+   * @returns {Promise<Object>} - Résultat de la finalisation
+   */
+  async finalizeAuction(auctionId) {
+    try {
+      // Vérifier que l'enchère existe
+      const auction = await Auction.findById(auctionId).populate('sectors');
+      
+      if (!auction) {
+        throw new Error(`Auction ${auctionId} not found`);
+      }
+      
+      // Vérifier que l'enchère est terminée
+      if (auction.endTime > new Date()) {
+        throw new Error(`Auction ${auctionId} has not ended yet`);
+      }
+      
+      // Vérifier que l'enchère n'est pas déjà finalisée
+      if (auction.status === 'finalized') {
+        throw new Error(`Auction ${auctionId} is already finalized`);
+      }
+      
+      // Déterminer les gagnants pour chaque secteur
+      const winners = [];
+      
+      for (const sector of auction.sectors) {
+        // Récupérer l'enchère la plus élevée pour ce secteur
+        const highestBid = await Bid.findOne({
+          auctionId: auctionId,
+          sectorId: sector._id
+        }).sort({ amount: -1 }).populate('companyId');
+        
+        if (highestBid) {
+          // Marquer l'entreprise comme gagnante pour ce secteur
+          const company = highestBid.companyId;
+          
+          // Enregistrer le gagnant dans la caisse commune et allouer les fonds
+          try {
+            // Convertir les jours de contrat en nombre
+            const contractDuration = parseInt(auction.contractDuration) || 90;
+            
+            // Enregistrer le gagnant dans la caisse commune
+            const registrationResult = await treasuryService.registerAuctionWinner(
+              sector._id.toString(),
+              company.walletAddress,
+              highestBid.amount,
+              contractDuration
+            );
+            
+            // Mettre à jour le secteur avec le gagnant
+            await sector.updateWinner(company._id, highestBid.amount);
+            
+            // Mettre à jour l'entreprise
+            await company.markAsAuctionWinner(
+              auctionId,
+              sector._id,
+              highestBid.amount
+            );
+            
+            winners.push({
+              sectorId: sector._id,
+              sectorName: sector.name,
+              companyId: company._id,
+              companyName: company.name,
+              bidAmount: highestBid.amount,
+              txHash: registrationResult.txHash
+            });
+          } catch (error) {
+            logError(`Error registering winner for sector ${sector._id}`, error);
+            
+            // Continuer avec les autres secteurs même en cas d'erreur
+            winners.push({
+              sectorId: sector._id,
+              sectorName: sector.name,
+              companyId: company._id,
+              companyName: company.name,
+              bidAmount: highestBid.amount,
+              status: 'error',
+              error: error.message
+            });
+          }
+        } else {
+          // Aucune enchère pour ce secteur
+          winners.push({
+            sectorId: sector._id,
+            sectorName: sector.name,
+            status: 'no_bids'
+          });
+          
+          // Réinitialiser le secteur pour la prochaine enchère
+          sector.status = 'inactive';
+          await sector.save();
+        }
+      }
+      
+      // Mettre à jour le statut de l'enchère
+      auction.status = 'finalized';
+      auction.finalizedAt = new Date();
+      auction.winners = winners.map(w => ({
+        sectorId: w.sectorId,
+        companyId: w.companyId,
+        bidAmount: w.bidAmount
+      }));
+      
+      await auction.save();
+      
+      return {
+        success: true,
+        auctionId: auction._id,
+        winners: winners
+      };
+    } catch (error) {
+      logError(`Error finalizing auction ${auctionId}`, error);
+      throw new Error(`Failed to finalize auction: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Récupère les enchères gagnées par une entreprise
+   * @param {string} companyId - ID de l'entreprise
+   * @returns {Promise<Array>} - Liste des enchères gagnées
+   */
+  async getCompanyWonAuctions(companyId) {
+    try {
+      // Récupérer l'entreprise
+      const company = await Company.findById(companyId);
+      
+      if (!company) {
+        throw new Error(`Company ${companyId} not found`);
+      }
+      
+      // Récupérer les enchères gagnées
+      const wonAuctions = await Promise.all(
+        (company.wonAuctions || []).map(async (auction) => {
+          try {
+            // Récupérer les détails de l'enchère
+            const auctionDetails = await Auction.findById(auction.auctionId);
+            
+            // Récupérer les détails du secteur
+            const sector = await Sector.findById(auction.sectorId);
+            
+            // Récupérer le solde actuel pour ce secteur dans la caisse commune
+            const sectorBalance = await treasuryService.getSectorBalance(auction.sectorId);
+            
+            return {
+              auctionId: auction.auctionId,
+              sectorId: auction.sectorId,
+              sectorName: sector ? sector.name : 'Unknown Sector',
+              bidAmount: auction.finalBidAmount,
+              winningDate: auction.winningDate,
+              auctionTitle: auctionDetails ? auctionDetails.title : 'Unknown Auction',
+              contractAddress: auction.contractAddress,
+              paymentStatus: auction.paymentStatus,
+              currentBalance: sectorBalance
+            };
+          } catch (error) {
+            // Retourner des informations minimales en cas d'erreur
+            return {
+              auctionId: auction.auctionId,
+              sectorId: auction.sectorId,
+              bidAmount: auction.finalBidAmount,
+              winningDate: auction.winningDate,
+              error: 'Error fetching details'
+            };
+          }
+        })
+      );
+      
+      return wonAuctions;
+    } catch (error) {
+      logError(`Error getting won auctions for company ${companyId}`, error);
+      return [];
+    }
+  }
+  
+  /**
+   * Récupère les statistiques d'enchères pour un tableau de bord
+   * @returns {Promise<Object>} - Statistiques d'enchères
+   */
+  async getAuctionStatistics() {
+    try {
+      const currentDate = new Date();
+      
+      // Enchères actives
+      const activeAuctions = await Auction.countDocuments({
+        startTime: { $lte: currentDate },
+        endTime: { $gte: currentDate },
+        status: 'active'
+      });
+      
+      // Enchères à venir
+      const upcomingAuctions = await Auction.countDocuments({
+        startTime: { $gt: currentDate },
+        status: 'upcoming'
+      });
+      
+      // Enchères terminées
+      const finalizedAuctions = await Auction.countDocuments({
+        status: 'finalized'
+      });
+      
+      // Enchères par secteur
+      const sectorStats = await Sector.aggregate([
+        {
+          $lookup: {
+            from: 'auctions',
+            localField: 'currentAuction',
+            foreignField: '_id',
+            as: 'auction'
+          }
+        },
+        {
+          $group: {
+            _id: { $ifNull: ['$status', 'unknown'] },
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+      
+      // Montant total des enchères
+      const bidsTotal = await Bid.aggregate([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' },
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+      
+      return {
+        activeAuctions,
+        upcomingAuctions,
+        finalizedAuctions,
+        totalBids: bidsTotal.length > 0 ? bidsTotal[0].count : 0,
+        totalBidAmount: bidsTotal.length > 0 ? bidsTotal[0].total : 0,
+        sectorsByStatus: sectorStats.reduce((acc, stat) => {
+          acc[stat._id] = stat.count;
+          return acc;
+        }, {})
+      };
+    } catch (error) {
+      logError('Error getting auction statistics', error);
+      return {
+        activeAuctions: 0,
+        upcomingAuctions: 0,
+        finalizedAuctions: 0,
+        totalBids: 0,
+        totalBidAmount: 0,
+        sectorsByStatus: {}
+      };
+    }
+  }
+  
+  /**
+   * Démarre une enchère programmée
+   * @param {string} auctionId - ID de l'enchère
+   * @returns {Promise<Object>} - Résultat de l'opération
+   */
+  async startAuction(auctionId) {
+    try {
+      // Vérifier que l'enchère existe
+      const auction = await Auction.findById(auctionId);
+      
+      if (!auction) {
+        throw new Error(`Auction ${auctionId} not found`);
+      }
+      
+      // Vérifier que l'enchère n'est pas déjà active ou finalisée
+      if (auction.status !== 'upcoming') {
+        throw new Error(`Auction ${auctionId} is not in upcoming status`);
+      }
+      
+      // Mettre à jour le statut de l'enchère
+      auction.status = 'active';
+      auction.startTime = new Date(); // Démarrer maintenant
+      
+      await auction.save();
+      
+      // Mettre à jour les secteurs
+      for (const sectorId of auction.sectors) {
+        const sector = await Sector.findById(sectorId);
+        if (sector) {
+          sector.status = 'active';
+          await sector.save();
+        }
+      }
+      
+      return {
+        success: true,
+        auctionId: auction._id,
+        startTime: auction.startTime,
+        endTime: auction.endTime
+      };
+    } catch (error) {
+      logError(`Error starting auction ${auctionId}`, error);
+      throw new Error(`Failed to start auction: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Planifie la vérification automatique des enchères
+   * Cette méthode devrait être appelée au démarrage de l'application
+   */
+  scheduleAuctionChecks() {
+    // Vérifier toutes les heures les enchères à démarrer
+    setInterval(async () => {
+      try {
+        const currentDate = new Date();
+        
+        // Trouver les enchères qui devraient démarrer
+        const auctionsToStart = await Auction.find({
+          startTime: { $lte: currentDate },
+          status: 'upcoming'
+        });
+        
+        // Démarrer ces enchères
+        for (const auction of auctionsToStart) {
+          try {
+            auction.status = 'active';
+            await auction.save();
+            
+            // Mettre à jour les secteurs
+            for (const sectorId of auction.sectors) {
+              const sector = await Sector.findById(sectorId);
+              if (sector) {
+                sector.status = 'active';
+                await sector.save();
+              }
+            }
+            
+            console.log(`Automatically started auction ${auction._id}`);
+          } catch (error) {
+            logError(`Error auto-starting auction ${auction._id}`, error);
+          }
+        }
+        
+        // Trouver les enchères qui devraient être finalisées
+        const auctionsToFinalize = await Auction.find({
+          endTime: { $lte: currentDate },
+          status: 'active'
+        });
+        
+        // Finaliser ces enchères
+        for (const auction of auctionsToFinalize) {
+          try {
+            await this.finalizeAuction(auction._id);
+            console.log(`Automatically finalized auction ${auction._id}`);
+          } catch (error) {
+            logError(`Error auto-finalizing auction ${auction._id}`, error);
+          }
+        }
+      } catch (error) {
+        logError('Error in scheduled auction check', error);
+      }
+    }, 60 * 60 * 1000); // Vérifier toutes les heures
+  }
+}
+
+// Exporter une instance unique du service
+module.exports = new AuctionService();

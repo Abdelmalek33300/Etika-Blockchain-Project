@@ -1,0 +1,145 @@
+// utils/secureStorage.js
+// Service de stockage sécurisé pour l'application mobile Étika
+
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+import EncryptedStorage from 'react-native-encrypted-storage';
+import { logError } from './errorTracking';
+
+// Clés de stockage utilisées dans l'application
+export const STORAGE_KEYS = {
+  AUTH_TOKEN: 'etika_auth_token',
+  USER_INFO: 'etika_user_info',
+  ONBOARDING_COMPLETED: 'etika_onboarding_completed',
+  REFERRAL_CODE: 'etika_referral_code',
+  NOTIFICATION_SETTINGS: 'etika_notification_settings',
+  WALLET_ADDRESS: 'etika_wallet_address', // Adresse du wallet custodial
+  CACHED_CERTIFICATES: 'etika_cached_certificates',
+  APP_SETTINGS: 'etika_app_settings'
+};
+
+/**
+ * Stocke une valeur de manière sécurisée
+ * @param {string} key - Clé de stockage
+ * @param {string|object} value - Valeur à stocker (chaîne ou objet qui sera sérialisé en JSON)
+ * @returns {Promise<boolean>} - Succès de l'opération
+ */
+export async function setSecureItem(key, value) {
+  try {
+    // Convertir les objets en chaînes JSON
+    const stringValue = typeof value === 'string' 
+      ? value 
+      : JSON.stringify(value);
+
+    // Utiliser le stockage approprié en fonction de la plateforme
+    if (Platform.OS === 'ios') {
+      // Utiliser SecureStore pour iOS
+      await SecureStore.setItemAsync(key, stringValue, {
+        keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY // Sécurité renforcée
+      });
+    } else {
+      // Utiliser EncryptedStorage pour Android
+      await EncryptedStorage.setItem(key, stringValue);
+    }
+    
+    return true;
+  } catch (error) {
+    logError(`Error storing secure item: ${key}`, error);
+    return false;
+  }
+}
+
+/**
+ * Récupère une valeur stockée de manière sécurisée
+ * @param {string} key - Clé de stockage
+ * @returns {Promise<any>} - Valeur stockée (chaîne ou objet désérialisé)
+ */
+export async function getSecureItem(key) {
+  try {
+    let result;
+    
+    // Utiliser le stockage approprié en fonction de la plateforme
+    if (Platform.OS === 'ios') {
+      // Utiliser SecureStore pour iOS
+      result = await SecureStore.getItemAsync(key);
+    } else {
+      // Utiliser EncryptedStorage pour Android
+      result = await EncryptedStorage.getItem(key);
+    }
+    
+    if (!result) {
+      return null;
+    }
+    
+    // Tenter de désérialiser la valeur JSON
+    try {
+      return JSON.parse(result);
+    } catch (e) {
+      // Si ce n'est pas du JSON valide, retourner la chaîne brute
+      return result;
+    }
+  } catch (error) {
+    logError(`Error retrieving secure item: ${key}`, error);
+    return null;
+  }
+}
+
+/**
+ * Supprime une valeur stockée de manière sécurisée
+ * @param {string} key - Clé de stockage
+ * @returns {Promise<boolean>} - Succès de l'opération
+ */
+export async function removeSecureItem(key) {
+  try {
+    // Utiliser le stockage approprié en fonction de la plateforme
+    if (Platform.OS === 'ios') {
+      // Utiliser SecureStore pour iOS
+      await SecureStore.deleteItemAsync(key);
+    } else {
+      // Utiliser EncryptedStorage pour Android
+      await EncryptedStorage.removeItem(key);
+    }
+    
+    return true;
+  } catch (error) {
+    logError(`Error removing secure item: ${key}`, error);
+    return false;
+  }
+}
+
+/**
+ * Effacer toutes les données sécurisées (utilisé lors de la déconnexion)
+ * @returns {Promise<boolean>} - Succès de l'opération
+ */
+export async function clearAllSecureItems() {
+  try {
+    if (Platform.OS === 'ios') {
+      // Pour iOS, supprimer les éléments un par un
+      const keys = Object.values(STORAGE_KEYS);
+      await Promise.all(keys.map(key => SecureStore.deleteItemAsync(key)));
+    } else {
+      // Pour Android, tout effacer d'un coup
+      await EncryptedStorage.clear();
+    }
+    
+    return true;
+  } catch (error) {
+    logError('Error clearing secure storage', error);
+    return false;
+  }
+}
+
+/**
+ * Vérifie si un élément existe dans le stockage sécurisé
+ * @param {string} key - Clé de stockage
+ * @returns {Promise<boolean>} - True si l'élément existe
+ */
+export async function hasSecureItem(key) {
+  try {
+    const item = await getSecureItem(key);
+    return item !== null;
+  } catch (error) {
+    logError(`Error checking secure item: ${key}`, error);
+    return false;
+  }
+}

@@ -1,0 +1,631 @@
+// services/auctionLockMechanism.js
+// Service pour sécuriser et verrouiller les transactions d'enchères
+
+const { ethers } = require('ethers');
+const { logError } = require('../utils/errorTracking');
+const { getSecureItem } = require('../utils/secureStorage');
+const treasuryService = require('./treasuryService');
+const config = require('../config');
+const { Auction } = require('../models/Auction');
+const { Bid } = require('../models/Bid');
+const { Company } = require('../models/Company');
+
+class AuctionLockMechanism {
+  constructor() {
+    this.web3 = null;
+    this.escrowContract = null;
+    this.initialized = false;
+    this.initializePromise = null;
+    this.lockedBids = new Map();
+  }
+  
+  /**
+   * Initialise le service de verrouillage des enchères
+   */
+  async initialize() {
+    if (this.initialized) return;
+    
+    // Si une initialisation est déjà en cours, attendre qu'elle se termine
+    if (this.initializePromise) {
+      return this.initializePromise;
+    }
+    
+    this.initializePromise = (async () => {
+      try {
+        // Créer une instance de provider
+        this.provider = new ethers.providers.JsonRpcProvider(config.POLYGON_RPC_URL);
+        
+        // Charger la clé privée pour les transactions
+        const privateKey = await getSecureItem('ETIKA_AUCTION_ADMIN_PRIVATE_KEY');
+        
+        if (privateKey) {
+          // Créer un wallet pour signer les transactions
+          this.wallet = new ethers.Wallet(privateKey, this.provider);
+          this.adminAddress = this.wallet.address;
+        } else {
+          console.warn('No auction admin private key found, bidding will be restricted');
+          this.wallet = null;
+          this.adminAddress = null;
+        }
+        
+        // Initialiser le contrat d'escrow si disponible
+        if (config.AUCTION_ESCROW_CONTRACT_ADDRESS) {
+          this.escrowContract = new ethers.Contract(
+            config.AUCTION_ESCROW_CONTRACT_ADDRESS,
+            require('../contracts/AuctionEscrowABI.json'),
+            this.wallet
+          );
+        }
+        
+        this.initialized = true;
+        console.log('AuctionLockMechanism initialized successfully');
+      } catch (error) {
+        logError('Failed to initialize AuctionLockMechanism', error);
+        throw new Error(`Initialization failed: ${error.message}`);
+      } finally {
+        this.initializePromise = null;
+      }
+    })();
+    
+    return this.initializePromise;
+  }
+  
+  /**
+   * Verrouille les fonds d'une enchère dans un escrow
+   * @param {string} bidId - ID de l'enchère
+   * @param {string} companyId - ID de l'entreprise
+   * @param {number} amount - Montant de l'enchère
+   * @returns {Promise<Object>} - Informations sur le verrouillage
+   */
+  async lockBidFunds(bidId, companyId, amount) {
+    await this.initialize();
+    
+    try {
+      // Récupérer l'offre
+      const bid = await Bid.findById(bidId).populate('companyId');
+      
+      if (!bid) {
+        throw new Error('Bid not found');
+      }
+      
+      // Vérifier que l'entreprise correspond
+      if (bid.companyId._id.toString() !== companyId) {
+        throw new Error('Company ID mismatch');
+      }
+      
+      // Vérifier que le montant correspond
+      if (bid.amount !== amount) {
+        throw new Error('Bid amount mismatch');
+      }
+      
+      // Si l'offre est déjà verrouillée, retourner les informations de verrouillage
+      if (this.lockedBids.has(bidId)) {
+        return this.lockedBids.get(bidId);
+      }
+      
+      let lockResult;
+      
+      // Utiliser l'escrow contract si disponible
+      if (this.escrowContract) {
+        // Récupérer l'adresse de l'entreprise
+        const company = await Company.findById(companyId);
+        
+        if (!company || !company.walletAddress) {
+          throw new Error('Company wallet address not found');
+        }
+        
+        // Préparer la transaction d'escrow
+        const tx = await this.escrowContract.lockBidFunds(
+          bidId,
+          company.walletAddress,
+          ethers.utils.parseEther(amount.toString()),
+          {
+            value: 0, // Pas de valeur envoyée avec la transaction
+            gasLimit: 300000
+          }
+        );
+        
+        // Attendre la confirmation de la transaction
+        const receipt = await tx.wait();
+        
+        // Récupérer l'ID du verrouillage depuis les événements
+        const event = receipt.events.find(e => e.event === 'BidLocked');
+        const lockId = event ? event.args.lockId.toString() : null;
+        
+        lockResult = {
+          bidId,
+          companyId,
+          amount,
+          lockId,
+          txHash: receipt.transactionHash,
+          timestamp: Date.now(),
+          blockchain: true
+        };
+      } else {
+        // Si pas de contrat d'escrow, utiliser un verrouillage en mémoire
+        lockResult = {
+          bidId,
+          companyId,
+          amount,
+          lockId: `lock-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          timestamp: Date.now(),
+          blockchain: false
+        };
+      }
+      
+      // Stocker l'information de verrouillage
+      this.lockedBids.set(bidId, lockResult);
+      
+      // Mettre à jour le statut de l'offre
+      bid.locked = true;
+      bid.lockId = lockResult.lockId;
+      bid.lockTimestamp = new Date();
+      
+      await bid.save();
+      
+      return lockResult;
+    } catch (error) {
+      logError(`Error locking bid funds for bid ${bidId}`, error);
+      throw new Error(`Failed to lock bid funds: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Transfère les fonds d'une enchère gagnante vers la caisse commune
+   * @param {string} auctionId - ID de l'enchère
+   * @param {string} sectorId - ID du secteur
+   * @param {string} winningBidId - ID de l'offre gagnante
+   * @returns {Promise<Object>} - Résultat du transfert
+   */
+  async transferWinningBidToTreasury(auctionId, sectorId, winningBidId) {
+    await this.initialize();
+    
+    try {
+      // Récupérer l'offre gagnante
+      const winningBid = await Bid.findById(winningBidId).populate('companyId');
+      
+      if (!winningBid) {
+        throw new Error('Winning bid not found');
+      }
+      
+      // Vérifier que l'offre a bien été verrouillée
+      if (!winningBid.locked) {
+        throw new Error('Winning bid is not locked');
+      }
+      
+      // Récupérer l'information de verrouillage
+      const lockInfo = this.lockedBids.get(winningBidId);
+      
+      if (!lockInfo) {
+        throw new Error('Lock information not found');
+      }
+      
+      let transferResult;
+      
+      // Si le verrouillage a été fait sur la blockchain
+      if (lockInfo.blockchain && this.escrowContract) {
+        // Préparer la transaction pour libérer les fonds vers la caisse commune
+        const tx = await this.escrowContract.releaseToTreasury(
+          lockInfo.lockId,
+          config.SPONSOR_TREASURY_CONTRACT_ADDRESS,
+          {
+            gasLimit: 300000
+          }
+        );
+        
+        // Attendre la confirmation de la transaction
+        const receipt = await tx.wait();
+        
+        transferResult = {
+          auctionId,
+          sectorId,
+          bidId: winningBidId,
+          amount: winningBid.amount,
+          txHash: receipt.transactionHash,
+          timestamp: Date.now(),
+          blockchain: true
+        };
+      } else {
+        // Si pas de verrouillage blockchain, faire une contribution native à la caisse commune
+        const contributionResult = await treasuryService.recordNativeContribution(
+          winningBid.companyId.walletAddress,
+          winningBid.amount,
+          `auction-${auctionId}-sector-${sectorId}`,
+          'auction_win'
+        );
+        
+        transferResult = {
+          auctionId,
+          sectorId,
+          bidId: winningBidId,
+          amount: winningBid.amount,
+          txHash: contributionResult.txHash,
+          timestamp: Date.now(),
+          blockchain: true
+        };
+      }
+      
+      // Supprimer l'information de verrouillage
+      this.lockedBids.delete(winningBidId);
+      
+      // Mettre à jour le statut de l'offre
+      winningBid.transferred = true;
+      winningBid.transferTimestamp = new Date();
+      winningBid.transferTxHash = transferResult.txHash;
+      
+      await winningBid.save();
+      
+      return transferResult;
+    } catch (error) {
+      logError(`Error transferring winning bid ${winningBidId} to treasury`, error);
+      throw new Error(`Failed to transfer winning bid: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Déverrouille les fonds d'une enchère perdante
+   * @param {string} bidId - ID de l'enchère
+   * @returns {Promise<Object>} - Résultat du déverrouillage
+   */
+  async unlockLosingBidFunds(bidId) {
+    await this.initialize();
+    
+    try {
+      // Récupérer l'offre
+      const bid = await Bid.findById(bidId);
+      
+      if (!bid) {
+        throw new Error('Bid not found');
+      }
+      
+      // Vérifier que l'offre a bien été verrouillée
+      if (!bid.locked) {
+        throw new Error('Bid is not locked');
+      }
+      
+      // Récupérer l'information de verrouillage
+      const lockInfo = this.lockedBids.get(bidId);
+      
+      if (!lockInfo) {
+        throw new Error('Lock information not found');
+      }
+      
+      let unlockResult;
+      
+      // Si le verrouillage a été fait sur la blockchain
+      if (lockInfo.blockchain && this.escrowContract) {
+        // Préparer la transaction pour libérer les fonds vers l'entreprise
+        const tx = await this.escrowContract.releaseToBidder(
+          lockInfo.lockId,
+          {
+            gasLimit: 300000
+          }
+        );
+        
+        // Attendre la confirmation de la transaction
+        const receipt = await tx.wait();
+        
+        unlockResult = {
+          bidId,
+          lockId: lockInfo.lockId,
+          txHash: receipt.transactionHash,
+          timestamp: Date.now(),
+          blockchain: true
+        };
+      } else {
+        // Si pas de verrouillage blockchain, simplement marquer comme déverrouillé
+        unlockResult = {
+          bidId,
+          lockId: lockInfo.lockId,
+          timestamp: Date.now(),
+          blockchain: false
+        };
+      }
+      
+      // Supprimer l'information de verrouillage
+      this.lockedBids.delete(bidId);
+      
+      // Mettre à jour le statut de l'offre
+      bid.locked = false;
+      bid.unlockTimestamp = new Date();
+      
+      await bid.save();
+      
+      return unlockResult;
+    } catch (error) {
+      logError(`Error unlocking bid funds for bid ${bidId}`, error);
+      throw new Error(`Failed to unlock bid funds: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Vérifie si une offre a ses fonds verrouillés
+   * @param {string} bidId - ID de l'enchère
+   * @returns {Promise<boolean>} - true si les fonds sont verrouillés
+   */
+  async isBidLocked(bidId) {
+    await this.initialize();
+    
+    try {
+      // Vérifier si l'offre est dans notre map de verrouillage local
+      if (this.lockedBids.has(bidId)) {
+        return true;
+      }
+      
+      // Vérifier dans la base de données
+      const bid = await Bid.findById(bidId);
+      return bid && bid.locked;
+    } catch (error) {
+      logError(`Error checking if bid ${bidId} is locked`, error);
+      return false;
+    }
+  }
+  
+  /**
+   * Lors de la finalisation d'une enchère, verrouille tous les fonds des meilleurs enchérisseurs
+   * @param {string} auctionId - ID de l'enchère
+   * @returns {Promise<Array>} - Résultats des verrouillages
+   */
+  async lockAllTopBids(auctionId) {
+    await this.initialize();
+    
+    try {
+      // Récupérer l'enchère
+      const auction = await Auction.findById(auctionId).populate('sectors');
+      
+      if (!auction) {
+        throw new Error('Auction not found');
+      }
+      
+      const lockResults = [];
+      
+      // Pour chaque secteur de l'enchère
+      for (const sectorId of auction.sectors) {
+        // Récupérer l'offre la plus élevée pour ce secteur
+        const highestBid = await Bid.findOne({
+          auctionId,
+          sectorId
+        }).sort({ amount: -1 });
+        
+        if (highestBid) {
+          try {
+            // Verrouiller les fonds de cette offre
+            const lockResult = await this.lockBidFunds(
+              highestBid._id,
+              highestBid.companyId,
+              highestBid.amount
+            );
+            
+            lockResults.push({
+              sectorId,
+              bidId: highestBid._id,
+              result: lockResult
+            });
+          } catch (error) {
+            logError(`Error locking funds for bid ${highestBid._id}`, error);
+            
+            lockResults.push({
+              sectorId,
+              bidId: highestBid._id,
+              error: error.message
+            });
+          }
+        }
+      }
+      
+      return lockResults;
+    } catch (error) {
+      logError(`Error locking all top bids for auction ${auctionId}`, error);
+      throw new Error(`Failed to lock all top bids: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Finalise les enchères gagnantes et transfère les fonds vers la caisse commune
+   * @param {string} auctionId - ID de l'enchère
+   * @param {Array} winningBids - Liste des enchères gagnantes par secteur
+   * @returns {Promise<Array>} - Résultats des transferts
+   */
+  async finalizeWinningBids(auctionId, winningBids) {
+    await this.initialize();
+    
+    try {
+      const transferResults = [];
+      
+      // Pour chaque offre gagnante
+      for (const winningBid of winningBids) {
+        if (!winningBid.bidId || winningBid.status === 'no_bids') {
+          continue;
+        }
+        
+        try {
+          // Transférer les fonds vers la caisse commune
+          const transferResult = await this.transferWinningBidToTreasury(
+            auctionId,
+            winningBid.sectorId,
+            winningBid.bidId
+          );
+          
+          transferResults.push({
+            sectorId: winningBid.sectorId,
+            bidId: winningBid.bidId,
+            result: transferResult
+          });
+        } catch (error) {
+          logError(`Error transferring winning bid ${winningBid.bidId} to treasury`, error);
+          
+          transferResults.push({
+            sectorId: winningBid.sectorId,
+            bidId: winningBid.bidId,
+            error: error.message
+          });
+        }
+      }
+      
+      return transferResults;
+    } catch (error) {
+      logError(`Error finalizing winning bids for auction ${auctionId}`, error);
+      throw new Error(`Failed to finalize winning bids: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Déverrouille les fonds de toutes les offres perdantes
+   * @param {string} auctionId - ID de l'enchère
+   * @param {Array} winningBids - Liste des enchères gagnantes par secteur
+   * @returns {Promise<Array>} - Résultats des déverrouillages
+   */
+  async unlockLosingBids(auctionId, winningBids) {
+    await this.initialize();
+    
+    try {
+      // Créer un Set des IDs des offres gagnantes pour une recherche efficace
+      const winningBidIds = new Set(
+        winningBids
+          .filter(wb => wb.bidId && wb.status !== 'no_bids')
+          .map(wb => wb.bidId.toString())
+      );
+      
+      // Récupérer toutes les offres verrouillées pour cette enchère
+      const lockedBids = await Bid.find({
+        auctionId,
+        locked: true
+      });
+      
+      const unlockResults = [];
+      
+      // Pour chaque offre verrouillée
+      for (const bid of lockedBids) {
+        // Si ce n'est pas une offre gagnante, la déverrouiller
+        if (!winningBidIds.has(bid._id.toString())) {
+          try {
+            // Déverrouiller les fonds
+            const unlockResult = await this.unlockLosingBidFunds(bid._id);
+            
+            unlockResults.push({
+              bidId: bid._id,
+              result: unlockResult
+            });
+          } catch (error) {
+            logError(`Error unlocking losing bid ${bid._id}`, error);
+            
+            unlockResults.push({
+              bidId: bid._id,
+              error: error.message
+            });
+          }
+        }
+      }
+      
+      return unlockResults;
+    } catch (error) {
+      logError(`Error unlocking losing bids for auction ${auctionId}`, error);
+      throw new Error(`Failed to unlock losing bids: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Exécute le processus complet de verrouillage, transfert et déverrouillage pour une enchère
+   * @param {string} auctionId - ID de l'enchère
+   * @returns {Promise<Object>} - Résultat complet du processus
+   */
+  async executeFullAuctionLockProcess(auctionId) {
+    await this.initialize();
+    
+    try {
+      console.log(`Starting full auction lock process for auction ${auctionId}`);
+      
+      // Étape 1: Verrouiller toutes les meilleures offres
+      console.log(`Step 1: Locking all top bids for auction ${auctionId}`);
+      const lockResults = await this.lockAllTopBids(auctionId);
+      
+      // Étape 2: Finaliser l'enchère pour déterminer les gagnants
+      console.log(`Step 2: Determining winners for auction ${auctionId}`);
+      const auctionService = require('./auctionService');
+      const finalizationResult = await auctionService.finalizeAuction(auctionId);
+      
+      if (!finalizationResult.success) {
+        throw new Error(`Failed to finalize auction: ${finalizationResult.error}`);
+      }
+      
+      // Étape 3: Transférer les fonds des enchères gagnantes vers la caisse commune
+      console.log(`Step 3: Transferring winning bids to treasury for auction ${auctionId}`);
+      const transferResults = await this.finalizeWinningBids(auctionId, finalizationResult.winners);
+      
+      // Étape 4: Déverrouiller les fonds des enchères perdantes
+      console.log(`Step 4: Unlocking losing bids for auction ${auctionId}`);
+      const unlockResults = await this.unlockLosingBids(auctionId, finalizationResult.winners);
+      
+      return {
+        success: true,
+        auctionId,
+        lockResults,
+        finalizationResult,
+        transferResults,
+        unlockResults
+      };
+    } catch (error) {
+      logError(`Error in full auction lock process for ${auctionId}`, error);
+      return {
+        success: false,
+        auctionId,
+        error: error.message
+      };
+    }
+  }
+  
+  /**
+   * Vérifie si un sponsor peut retirer prématurément ses fonds
+   * @param {string} sectorId - ID du secteur
+   * @param {string} sponsorAddress - Adresse du sponsor
+   * @returns {Promise<boolean>} - true si le retrait est autorisé
+   */
+  async canSponsorWithdrawFunds(sectorId, sponsorAddress) {
+    await this.initialize();
+    
+    try {
+      // Récupérer les informations du sponsor
+      const sponsorInfo = await treasuryService.getSponsorInfo(sectorId);
+      
+      // Le sponsor doit être actif et correspondre à l'adresse fournie
+      if (!sponsorInfo || !sponsorInfo.active || sponsorInfo.sponsorAddress !== sponsorAddress) {
+        return false;
+      }
+      
+      // Vérifier les conditions qui empêcheraient le retrait
+      
+      // 1. La période de sponsoring ne doit pas être en cours
+      const now = new Date();
+      if (now >= sponsorInfo.startTime && now <= sponsorInfo.endTime) {
+        return false;
+      }
+      
+      // 2. Vérifier s'il y a des avoirs en circulation qui dépendent de ce sponsor
+      const activeLoyaltyBalances = await this._checkActiveLoyaltyBalances(sectorId);
+      if (activeLoyaltyBalances > 0) {
+        return false;
+      }
+      
+      // Toutes les vérifications sont passées, le retrait est autorisé
+      return true;
+    } catch (error) {
+      logError(`Error checking if sponsor ${sponsorAddress} can withdraw funds for sector ${sectorId}`, error);
+      return false; // Par sécurité, refuser le retrait en cas d'erreur
+    }
+  }
+  
+  /**
+   * Vérifie s'il y a des avoirs en circulation pour un secteur
+   * @param {string} sectorId - ID du secteur
+   * @returns {Promise<number>} - Montant total des avoirs en circulation
+   */
+  async _checkActiveLoyaltyBalances(sectorId) {
+    // Cette méthode devrait interroger le contrat de loyauté pour obtenir
+    // le montant total des avoirs en circulation pour ce secteur
+    // Pour simplifier, nous supposons qu'il y a toujours des avoirs en circulation
+    return 1;
+  }
+}
+
+// Exporter une instance unique du service
+module.exports = new AuctionLockMechanism();

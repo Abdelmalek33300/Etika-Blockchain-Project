@@ -1,0 +1,539 @@
+// tests/runSystemTests.js
+// Script pour exécuter tous les tests système et générer un rapport complet
+
+const { testWinningBidLockdown, testForcedRefund, testLosingBidsUnlock } = require('./auctionVerificationTests');
+const { testNFTBalanceReduction, testDoubleSpendPrevention } = require('./nftSpendingTests');
+const { testSponsorCommitment, testPrematureWithdrawalAttempt } = require('./sponsorCommitmentTests');
+const { Auction } = require('../models/Auction');
+const { Sector } = require('../models/Sector');
+const { User } = require('../models/User');
+const fs = require('fs').promises;
+const path = require('path');
+const { logError } = require('../utils/errorTracking');
+
+/**
+ * Exécute une suite complète de tests système
+ * @param {Object} options - Options de test
+ * @returns {Promise<Object>} - Résultats des tests
+ */
+async function runAllSystemTests(options = {}) {
+  console.log('Starting system tests...');
+  const startTime = Date.now();
+  
+  const results = {
+    timestamp: new Date().toISOString(),
+    overview: {
+      total: 0,
+      passed: 0,
+      failed: 0,
+      skipped: 0
+    },
+    auctionTests: [],
+    nftTests: [],
+    sponsorTests: [],
+    errors: []
+  };
+  
+  try {
+    // 1. Récupérer les données nécessaires pour les tests
+    console.log('Retrieving test data...');
+    
+    // Récupérer une enchère finalisée récente
+    const recentAuction = await getRecentFinalizedAuction();
+    
+    // Récupérer un secteur avec un sponsor actif
+    const sponsoredSector = await getSponsoredSector();
+    
+    // Récupérer un utilisateur avec une carte de fidélité
+    const testUser = await getUserWithLoyaltyCard();
+    
+    // 2. Tests de verrouillage des enchères
+    console.log('Running auction lockdown tests...');
+    
+    if (recentAuction) {
+      try {
+        // Test du verrouillage des enchères gagnantes
+        const lockdownTest = await testWinningBidLockdown(recentAuction._id);
+        results.auctionTests.push({
+          type: 'winning_bid_lockdown',
+          auctionId: recentAuction._id,
+          results: lockdownTest,
+          passed: lockdownTest.overallSuccess
+        });
+        
+        updateTestCounts(results, lockdownTest.overallSuccess);
+        
+        // Test des tentatives de remboursement forcé
+        if (lockdownTest.overallSuccess && sponsoredSector) {
+          const forcedRefundTest = await testForcedRefund(recentAuction._id, sponsoredSector._id);
+          results.auctionTests.push({
+            type: 'forced_refund',
+            auctionId: recentAuction._id,
+            sectorId: sponsoredSector._id,
+            results: forcedRefundTest,
+            passed: forcedRefundTest.overallSuccess
+          });
+          
+          updateTestCounts(results, forcedRefundTest.overallSuccess);
+        }
+        
+        // Test du déverrouillage des enchères perdantes
+        const losingBidsTest = await testLosingBidsUnlock(recentAuction._id);
+        results.auctionTests.push({
+          type: 'losing_bids_unlock',
+          auctionId: recentAuction._id,
+          results: losingBidsTest,
+          passed: losingBidsTest.overallSuccess
+        });
+        
+        updateTestCounts(results, losingBidsTest.overallSuccess);
+      } catch (auctionError) {
+        logError('Error in auction tests', auctionError);
+        results.errors.push({
+          type: 'auction_tests',
+          error: auctionError.message
+        });
+      }
+    } else {
+      console.log('Skipping auction tests: No finalized auction found');
+      results.overview.skipped += 3; // 3 tests skipped
+    }
+    
+    // 3. Tests de dépense des avoirs NFT
+    console.log('Running NFT spending tests...');
+    
+    if (testUser && sponsoredSector) {
+      try {
+        // Test de la réduction de solde après dépense
+        const balanceReductionTest = await testNFTBalanceReduction(
+          testUser._id,
+          sponsoredSector._id,
+          testUser.sponsorId, // Utiliser un sponsor associé à l'utilisateur
+          10 // Montant à dépenser
+        );
+        
+        results.nftTests.push({
+          type: 'balance_reduction',
+          userId: testUser._id,
+          sectorId: sponsoredSector._id,
+          results: balanceReductionTest,
+          passed: balanceReductionTest.overallSuccess
+        });
+        
+        updateTestCounts(results, balanceReductionTest.overallSuccess);
+        
+        // Test de prévention de double dépense
+        if (balanceReductionTest.overallSuccess) {
+          const doubleSpendTest = await testDoubleSpendPrevention(
+            testUser._id,
+            sponsoredSector._id,
+            testUser.sponsorId,
+            10
+          );
+          
+          results.nftTests.push({
+            type: 'double_spend_prevention',
+            userId: testUser._id,
+            sectorId: sponsoredSector._id,
+            results: doubleSpendTest,
+            passed: doubleSpendTest.overallSuccess
+          });
+          
+          updateTestCounts(results, doubleSpendTest.overallSuccess);
+        }
+      } catch (nftError) {
+        logError('Error in NFT tests', nftError);
+        results.errors.push({
+          type: 'nft_tests',
+          error: nftError.message
+        });
+      }
+    } else {
+      console.log('Skipping NFT tests: Missing test user or sponsored sector');
+      results.overview.skipped += 2; // 2 tests skipped
+    }
+    
+    // 4. Tests d'engagement des sponsors
+    console.log('Running sponsor commitment tests...');
+    
+    if (sponsoredSector) {
+      try {
+        // Test de l'engagement du sponsor
+        const commitmentTest = await testSponsorCommitment(sponsoredSector._id);
+        
+        results.sponsorTests.push({
+          type: 'sponsor_commitment',
+          sectorId: sponsoredSector._id,
+          results: commitmentTest,
+          passed: commitmentTest.overallSuccess
+        });
+        
+        updateTestCounts(results, commitmentTest.overallSuccess);
+        
+        // Test de tentative de retrait prématuré
+        if (commitmentTest.overallSuccess && commitmentTest.sponsorId) {
+          const withdrawalAttemptTest = await testPrematureWithdrawalAttempt(
+            sponsoredSector._id,
+            commitmentTest.sponsorId
+          );
+          
+          results.sponsorTests.push({
+            type: 'premature_withdrawal',
+            sectorId: sponsoredSector._id,
+            sponsorId: commitmentTest.sponsorId,
+            results: withdrawalAttemptTest,
+            passed: withdrawalAttemptTest.overallSuccess
+          });
+          
+          updateTestCounts(results, withdrawalAttemptTest.overallSuccess);
+        }
+      } catch (sponsorError) {
+        logError('Error in sponsor tests', sponsorError);
+        results.errors.push({
+          type: 'sponsor_tests',
+          error: sponsorError.message
+        });
+      }
+    } else {
+      console.log('Skipping sponsor tests: No sponsored sector found');
+      results.overview.skipped += 2; // 2 tests skipped
+    }
+    
+    // Finaliser les résultats
+    results.duration = Date.now() - startTime;
+    console.log(`Tests completed in ${results.duration}ms`);
+    console.log(`Results: ${results.overview.passed} passed, ${results.overview.failed} failed, ${results.overview.skipped} skipped`);
+    
+    // Sauvegarder les résultats
+    await saveTestResults(results);
+    
+    return results;
+  } catch (error) {
+    logError('Critical error in system tests', error);
+    results.errors.push({
+      type: 'critical',
+      error: error.message
+    });
+    
+    // Sauvegarder les résultats même en cas d'erreur
+    await saveTestResults(results);
+    
+    throw error;
+  }
+}
+
+/**
+ * Met à jour les compteurs de test
+ * @param {Object} results - Résultats globaux
+ * @param {boolean} passed - Si le test a réussi
+ */
+function updateTestCounts(results, passed) {
+  results.overview.total++;
+  
+  if (passed) {
+    results.overview.passed++;
+  } else {
+    results.overview.failed++;
+  }
+}
+
+/**
+ * Récupère une enchère finalisée récente
+ * @returns {Promise<Object|null>} - Enchère finalisée ou null
+ */
+async function getRecentFinalizedAuction() {
+  try {
+    return await Auction.findOne({ status: 'finalized' })
+      .sort({ finalizedAt: -1 })
+      .populate('sectors');
+  } catch (error) {
+    logError('Error getting recent finalized auction', error);
+    return null;
+  }
+}
+
+/**
+ * Récupère un secteur avec un sponsor actif
+ * @returns {Promise<Object|null>} - Secteur sponsorisé ou null
+ */
+async function getSponsoredSector() {
+  try {
+    // Cette fonction dépend de la façon dont vous stockez les informations sur les sponsors
+    // Ici, nous supposons qu'un secteur avec un currentWinner a un sponsor actif
+    return await Sector.findOne({ 'currentWinner.companyId': { $exists: true } });
+  } catch (error) {
+    logError('Error getting sponsored sector', error);
+    return null;
+  }
+}
+
+/**
+ * Récupère un utilisateur avec une carte de fidélité
+ * @returns {Promise<Object|null>} - Utilisateur ou null
+ */
+async function getUserWithLoyaltyCard() {
+  try {
+    return await User.findOne({ tokenId: { $exists: true } });
+  } catch (error) {
+    logError('Error getting user with loyalty card', error);
+    return null;
+  }
+}
+
+/**
+ * Sauvegarde les résultats des tests
+ * @param {Object} results - Résultats des tests
+ */
+async function saveTestResults(results) {
+  try {
+    const timestamp = new Date().toISOString().replace(/:/g, '-');
+    const filePath = path.join(__dirname, '../logs', `system-tests-${timestamp}.json`);
+    
+    // Créer le dossier logs s'il n'existe pas
+    await fs.mkdir(path.join(__dirname, '../logs'), { recursive: true });
+    
+    // Écrire les résultats dans un fichier JSON
+    await fs.writeFile(filePath, JSON.stringify(results, null, 2));
+    
+    console.log(`Test results saved to ${filePath}`);
+    return filePath;
+  } catch (error) {
+    logError('Error saving test results', error);
+    return null;
+  }
+}
+
+/**
+ * Génère un rapport HTML à partir des résultats des tests
+ * @param {Object} results - Résultats des tests
+ * @returns {Promise<string>} - Chemin du fichier HTML
+ */
+async function generateHtmlReport(results) {
+  try {
+    // Créer un rapport HTML simple
+    const timestamp = new Date().toISOString().replace(/:/g, '-');
+    const filePath = path.join(__dirname, '../logs', `system-tests-report-${timestamp}.html`);
+    
+    // Créer le dossier logs s'il n'existe pas
+    await fs.mkdir(path.join(__dirname, '../logs'), { recursive: true });
+    
+    // Contenu HTML
+    let html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>System Tests Report - ${new Date(results.timestamp).toLocaleString()}</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2, h3 { color: #333; }
+        .overview { display: flex; margin-bottom: 20px; }
+        .stat { margin-right: 20px; padding: 10px; border-radius: 5px; }
+        .passed { background-color: #dff0d8; color: #3c763d; }
+        .failed { background-color: #f2dede; color: #a94442; }
+        .skipped { background-color: #fcf8e3; color: #8a6d3b; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .success { color: green; }
+        .error { color: red; }
+        .details { margin-left: 20px; }
+      </style>
+    </head>
+    <body>
+      <h1>System Tests Report</h1>
+      <p>Generated on: ${new Date(results.timestamp).toLocaleString()}</p>
+      <p>Duration: ${results.duration}ms</p>
+      
+      <h2>Overview</h2>
+      <div class="overview">
+        <div class="stat passed">Passed: ${results.overview.passed}</div>
+        <div class="stat failed">Failed: ${results.overview.failed}</div>
+        <div class="stat skipped">Skipped: ${results.overview.skipped}</div>
+        <div class="stat">Total: ${results.overview.total}</div>
+      </div>
+      
+      <h2>Auction Tests</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Auction ID</th>
+            <th>Result</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    // Ajouter les tests d'enchères
+    for (const test of results.auctionTests) {
+      html += `
+        <tr>
+          <td>${test.type}</td>
+          <td>${test.auctionId}</td>
+          <td class="${test.passed ? 'success' : 'error'}">${test.passed ? 'PASSED' : 'FAILED'}</td>
+          <td>
+            <details>
+              <summary>View details</summary>
+              <div class="details">
+                <pre>${JSON.stringify(test.results, null, 2)}</pre>
+              </div>
+            </details>
+          </td>
+        </tr>
+      `;
+    }
+    
+    html += `
+        </tbody>
+      </table>
+      
+      <h2>NFT Tests</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>User ID</th>
+            <th>Sector ID</th>
+            <th>Result</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    // Ajouter les tests NFT
+    for (const test of results.nftTests) {
+      html += `
+        <tr>
+          <td>${test.type}</td>
+          <td>${test.userId}</td>
+          <td>${test.sectorId}</td>
+          <td class="${test.passed ? 'success' : 'error'}">${test.passed ? 'PASSED' : 'FAILED'}</td>
+          <td>
+            <details>
+              <summary>View details</summary>
+              <div class="details">
+                <pre>${JSON.stringify(test.results, null, 2)}</pre>
+              </div>
+            </details>
+          </td>
+        </tr>
+      `;
+    }
+    
+    html += `
+        </tbody>
+      </table>
+      
+      <h2>Sponsor Tests</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Sector ID</th>
+            <th>Sponsor ID</th>
+            <th>Result</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    // Ajouter les tests de sponsors
+    for (const test of results.sponsorTests) {
+      html += `
+        <tr>
+          <td>${test.type}</td>
+          <td>${test.sectorId}</td>
+          <td>${test.sponsorId || 'N/A'}</td>
+          <td class="${test.passed ? 'success' : 'error'}">${test.passed ? 'PASSED' : 'FAILED'}</td>
+          <td>
+            <details>
+              <summary>View details</summary>
+              <div class="details">
+                <pre>${JSON.stringify(test.results, null, 2)}</pre>
+              </div>
+            </details>
+          </td>
+        </tr>
+      `;
+    }
+    
+    html += `
+        </tbody>
+      </table>
+      
+      <h2>Errors</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    // Ajouter les erreurs
+    for (const error of results.errors) {
+      html += `
+        <tr>
+          <td>${error.type}</td>
+          <td class="error">${error.error}</td>
+        </tr>
+      `;
+    }
+    
+    if (results.errors.length === 0) {
+      html += `
+        <tr>
+          <td colspan="2">No errors detected</td>
+        </tr>
+      `;
+    }
+    
+    html += `
+        </tbody>
+      </table>
+    </body>
+    </html>
+    `;
+    
+    // Écrire le rapport HTML
+    await fs.writeFile(filePath, html);
+    
+    console.log(`HTML report saved to ${filePath}`);
+    return filePath;
+  } catch (error) {
+    logError('Error generating HTML report', error);
+    return null;
+  }
+}
+
+// Exporter les fonctions principales
+module.exports = {
+  runAllSystemTests,
+  generateHtmlReport
+};
+
+// Si ce fichier est exécuté directement, lancer les tests
+if (require.main === module) {
+  runAllSystemTests()
+    .then(async (results) => {
+      // Générer un rapport HTML
+      await generateHtmlReport(results);
+      
+      // Sortir avec un code d'erreur si des tests ont échoué
+      if (results.overview.failed > 0) {
+        process.exit(1);
+      } else {
+        process.exit(0);
+      }
+    })
+    .catch((error) => {
+      console.error('Critical error running tests:', error);
+      process.exit(1);
+    });
+}

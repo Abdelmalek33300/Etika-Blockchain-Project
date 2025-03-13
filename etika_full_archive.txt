@@ -1,0 +1,747 @@
+// ==========================================================================
+// SYSTÈME ÉTIKA - ARCHIVE COMPLÈTE
+// ==========================================================================
+// Cette archive contient:
+// 1. Les structures de données fondamentales
+// 2. Le système d'enchères avec intégration PoP
+// 3. Les améliorations basées sur les recommandations de Gemini
+
+// ==========================================================================
+// PARTIE 1: STRUCTURES DE DONNÉES FONDAMENTALES
+// ==========================================================================
+
+// etika-data-structure/src/lib.rs
+//
+// Ce module définit les structures de données fondamentales utilisées dans l'écosystème Étika.
+// Il sert de base commune pour tous les autres modules du système.
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
+use codec::{Decode, Encode};
+use sp_runtime::{
+    generic,
+    traits::{BlakeTwo256, IdentifyAccount, Verify},
+    MultiSignature, RuntimeDebug,
+};
+use sp_std::prelude::*;
+use frame_support::Parameter;
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
+
+/// Type de base pour les montants financiers et les soldes dans l'écosystème Étika
+pub type Balance = u128;
+
+/// Type pour représenter les moments dans le temps
+pub type Moment = u64;
+
+/// Type pour les identifiants de block
+pub type BlockNumber = u32;
+
+/// Type pour les hashs
+pub type Hash = sp_core::H256;
+
+/// Type pour les signatures
+pub type Signature = MultiSignature;
+
+/// Type pour les clés publiques dans Étika
+pub type AccountPublic = <Signature as Verify>::Signer;
+
+/// Type pour les identifiants de compte dans Étika
+pub type AccountId = <AccountPublic as IdentifyAccount>::AccountId;
+
+/// Entête de block pour la blockchain Étika
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct Header {
+    pub parent_hash: Hash,
+    pub number: BlockNumber,
+    pub state_root: Hash,
+    pub extrinsics_root: Hash,
+    pub digest: generic::Digest,
+}
+
+/// Block complet pour la blockchain Étika
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct Block {
+    pub header: Header,
+    pub extrinsics: Vec<u8>,
+}
+
+/// Représente l'état d'un token Étika (latent ou activé)
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum TokenState {
+    /// Token distribué mais pas encore activé
+    Latent,
+    /// Token activé et utilisable dans l'écosystème
+    Active,
+    /// Token verrouillé (utilisé dans certains contrats)
+    Locked { unlock_time: Moment },
+    /// Token brûlé (retiré de la circulation)
+    Burned,
+}
+
+/// Représente un token Étika avec son état et ses métadonnées
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct Token {
+    /// Identifiant unique du token
+    pub id: [u8; 32],
+    /// État actuel du token
+    pub state: TokenState,
+    /// Propriétaire actuel du token
+    pub owner: AccountId,
+    /// Moment de création du token
+    pub created_at: Moment,
+    /// Moment de la dernière mise à jour du token
+    pub updated_at: Moment,
+    /// Valeur actuelle du token (peut varier selon l'état)
+    pub value: Balance,
+    /// Historique des transferts (limité aux 5 derniers pour économiser l'espace)
+    pub transfer_history: Vec<(AccountId, Moment)>,
+}
+
+/// Types d'acteurs dans l'écosystème Étika
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum ActorType {
+    /// Consommateur final
+    Consumer,
+    /// Commerçant (vente au détail)
+    Merchant,
+    /// Fournisseur (B2B)
+    Supplier,
+    /// Sponsor officiel (sélectionné par enchères)
+    Sponsor,
+    /// ONG partenaire
+    NGO,
+    /// Organisme public
+    PublicEntity,
+    /// Investisseur
+    Investor,
+}
+
+/// Niveaux d'ancienneté/fidélité dans le système
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, PartialOrd, Ord)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum LoyaltyTier {
+    Bronze,
+    Silver,
+    Gold,
+    Platinum,
+    Diamond,
+}
+
+/// Profil d'un acteur dans l'écosystème Étika
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct ActorProfile {
+    /// Identifiant du compte
+    pub account_id: AccountId,
+    /// Type d'acteur
+    pub actor_type: ActorType,
+    /// Nom/Identifiant public
+    pub name: Vec<u8>,
+    /// Moment de l'inscription
+    pub registered_at: Moment,
+    /// Niveau de fidélité/ancienneté
+    pub loyalty_tier: LoyaltyTier,
+    /// Indicateur de participation à l'hébergement de la blockchain
+    pub is_hosting_node: bool,
+    /// Informations de contact (téléphone, email, etc.)
+    pub contact_info: Vec<u8>,
+    /// Métadonnées additionnelles (format JSON)
+    pub metadata: Vec<u8>,
+}
+
+/// Information sur l'épargne d'un consommateur
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct ConsumerSavings {
+    /// Identifiant du consommateur
+    pub consumer_id: AccountId,
+    /// Épargne à long terme (80%)
+    pub long_term_savings: Balance,
+    /// Épargne pour projets personnels (20%)
+    pub personal_projects_savings: Balance,
+    /// Historique des contributions
+    pub contribution_history: Vec<(AccountId, Balance, Moment)>,
+    /// Taux de crédit actuel (basé sur l'ancienneté)
+    pub current_credit_rate: u32, // En centièmes de pourcentage (e.g., 250 = 2.5%)
+}
+
+/// Données d'une transaction avec preuve d'achat (PoP)
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct PoPTransaction {
+    /// Identifiant unique de la transaction
+    pub id: [u8; 32],
+    /// Consommateur impliqué
+    pub consumer: AccountId,
+    /// Commerçant impliqué
+    pub merchant: AccountId,
+    /// Fournisseurs impliqués (peut être multiple ou vide en cas de vente directe)
+    pub suppliers: Vec<AccountId>,
+    /// Montant de la transaction financière standard
+    pub standard_amount: Balance,
+    /// Tokens échangés
+    pub tokens_exchanged: Balance,
+    /// Épargne générée
+    pub savings_generated: Balance,
+    /// Horodatage de la transaction
+    pub timestamp: Moment,
+    /// Hash du ticket de caisse numérique
+    pub receipt_hash: [u8; 32],
+    /// Signatures des participants
+    pub signatures: Vec<(AccountId, Signature)>,
+}
+
+/// Données d'une enchère pour sélection des sponsors
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct Auction {
+    /// Identifiant unique de l'enchère
+    pub id: [u8; 32],
+    /// Catégorie concernée (secteur d'activité)
+    pub category: Vec<u8>,
+    /// Moment de début de l'enchère
+    pub start_time: Moment,
+    /// Moment de fin de l'enchère
+    pub end_time: Moment,
+    /// Prix de départ
+    pub starting_price: Balance,
+    /// Enchère minimale
+    pub min_bid_increment: Balance,
+    /// État de l'enchère
+    pub status: AuctionStatus,
+    /// Historique des enchères
+    pub bid_history: Vec<Bid>,
+}
+
+/// État possible d'une enchère
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum AuctionStatus {
+    /// Enchère en attente de démarrage
+    Pending,
+    /// Enchère en cours
+    Active,
+    /// Enchère terminée avec succès
+    Completed,
+    /// Enchère annulée
+    Cancelled,
+    /// Échec de l'enchère (pas d'offre supérieure au prix minimum)
+    Failed,
+}
+
+/// Offre dans une enchère
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct Bid {
+    /// Identifiant de l'enchérisseur
+    pub bidder: AccountId,
+    /// Montant de l'enchère
+    pub amount: Balance,
+    /// Moment de l'enchère
+    pub timestamp: Moment,
+}
+
+/// Relation commerciale entre un commerçant et un fournisseur
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct CommercialRelationship {
+    /// Identifiant du commerçant
+    pub merchant: AccountId,
+    /// Identifiant du fournisseur
+    pub supplier: AccountId,
+    /// Catégorie de produits/services
+    pub category: Vec<u8>,
+    /// Conditions de l'affacturage
+    pub factoring_conditions: FactoringConditions,
+    /// Moment de création de la relation
+    pub created_at: Moment,
+    /// État de la relation
+    pub status: RelationshipStatus,
+}
+
+/// Conditions d'affacturage
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct FactoringConditions {
+    /// Pourcentage du paiement immédiat
+    pub immediate_payment_percent: u8,
+    /// Délai pour le reste du paiement (en secondes)
+    pub remaining_payment_delay: u64,
+    /// Taux d'intérêt de l'affacturage
+    pub interest_rate: u32, // En centièmes de pourcentage
+}
+
+/// État d'une relation commerciale
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum RelationshipStatus {
+    /// Relation active
+    Active,
+    /// Relation en attente de validation
+    Pending,
+    /// Relation suspendue
+    Suspended,
+    /// Relation terminée
+    Terminated,
+}
+
+/// Information sur les participants à l'hébergement de la blockchain
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct BlockchainHost {
+    /// Identifiant du compte
+    pub account_id: AccountId,
+    /// Type d'acteur
+    pub actor_type: ActorType,
+    /// Informations sur le nœud
+    pub node_info: NodeInfo,
+    /// Bonus accumulés pour l'hébergement
+    pub hosting_bonus: Balance,
+    /// Moment de début d'hébergement
+    pub hosting_since: Moment,
+}
+
+/// Informations sur un nœud de la blockchain
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct NodeInfo {
+    /// Identifiant du nœud
+    pub node_id: [u8; 32],
+    /// Adresse réseau du nœud
+    pub network_address: Vec<u8>,
+    /// Capacité de stockage allouée (en bytes)
+    pub storage_capacity: u64,
+    /// Disponibilité historique (pourcentage)
+    pub availability_score: u8,
+    /// Version du logiciel
+    pub software_version: Vec<u8>,
+}
+
+/// Ordre sur la place de marché
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct MarketOrder {
+    /// Identifiant unique de l'ordre
+    pub id: [u8; 32],
+    /// Créateur de l'ordre
+    pub creator: AccountId,
+    /// Type d'ordre
+    pub order_type: OrderType,
+    /// Quantité de tokens
+    pub quantity: Balance,
+    /// Prix par token
+    pub price: Balance,
+    /// Moment de création
+    pub created_at: Moment,
+    /// État de l'ordre
+    pub status: OrderStatus,
+    /// Expirations (0 = pas d'expiration)
+    pub expiration: Moment,
+}
+
+/// Type d'ordre sur la place de marché
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum OrderType {
+    /// Achat de tokens
+    Buy,
+    /// Vente de tokens
+    Sell,
+}
+
+/// État d'un ordre sur la place de marché
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum OrderStatus {
+    /// Ordre actif
+    Active,
+    /// Ordre partiellement exécuté
+    PartiallyFilled,
+    /// Ordre complètement exécuté
+    Filled,
+    /// Ordre annulé
+    Cancelled,
+    /// Ordre expiré
+    Expired,
+}
+
+/// Produit financier proposé par le fonds des consommateurs
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct FinancialProduct {
+    /// Identifiant unique du produit
+    pub id: [u8; 32],
+    /// Nom du produit
+    pub name: Vec<u8>,
+    /// Description détaillée
+    pub description: Vec<u8>,
+    /// Type de produit
+    pub product_type: ProductType,
+    /// Rendement anticipé (en centièmes de pourcentage)
+    pub expected_yield: u32,
+    /// Durée minimale d'investissement (en secondes)
+    pub min_investment_duration: u64,
+    /// Montant minimum d'investissement
+    pub min_investment_amount: Balance,
+    /// Montant total actuellement investi
+    pub total_invested: Balance,
+    /// Risque associé (1-5)
+    pub risk_level: u8,
+    /// Moment de création
+    pub created_at: Moment,
+    /// État du produit
+    pub status: ProductStatus,
+}
+
+/// Type de produit financier
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum ProductType {
+    /// Épargne garantie
+    GuaranteedSavings,
+    /// Prêt aux entreprises
+    BusinessLoan,
+    /// Produit d'investissement
+    Investment,
+    /// Autre
+    Other,
+}
+
+/// État d'un produit financier
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum ProductStatus {
+    /// En cours de souscription
+    Open,
+    /// Fermé aux nouvelles souscriptions
+    Closed,
+    /// Arrivé à maturité
+    Matured,
+    /// Liquidé avant terme
+    EarlyTerminated,
+}
+
+/// Traits pour les modules du système Étika
+pub trait TokenSystem: Sized {
+    fn distribute_tokens(to: &AccountId, amount: Balance) -> Result<(), &'static str>;
+    fn activate_tokens(from: &AccountId, amount: Balance) -> Result<(), &'static str>;
+    fn burn_tokens(from: &AccountId, amount: Balance) -> Result<(), &'static str>;
+    fn transfer_tokens(from: &AccountId, to: &AccountId, amount: Balance) -> Result<(), &'static str>;
+}
+
+pub trait ConsumerFund: Sized {
+    fn add_savings(consumer: &AccountId, amount: Balance) -> Result<(), &'static str>;
+    fn get_savings_balance(consumer: &AccountId) -> Result<(Balance, Balance), &'static str>;
+    fn calculate_credit_rate(consumer: &AccountId) -> Result<u32, &'static str>;
+}
+
+pub trait AuctionSystem: Sized {
+    fn create_auction(category: Vec<u8>, start_time: Moment, duration: u64, starting_price: Balance) -> Result<[u8; 32], &'static str>;
+    fn place_bid(auction_id: [u8; 32], bidder: &AccountId, amount: Balance) -> Result<(), &'static str>;
+    fn finalize_auction(auction_id: [u8; 32]) -> Result<Option<AccountId>, &'static str>;
+}
+
+pub trait FactoringSystem: Sized {
+    fn register_relationship(merchant: &AccountId, supplier: &AccountId, conditions: FactoringConditions) -> Result<(), &'static str>;
+    fn process_factoring_payment(pop_transaction: &PoPTransaction) -> Result<(), &'static str>;
+    fn get_factoring_conditions(merchant: &AccountId, supplier: &AccountId) -> Result<FactoringConditions, &'static str>;
+}
+
+pub trait Marketplace: Sized {
+    fn create_order(creator: &AccountId, order_type: OrderType, quantity: Balance, price: Balance, expiration: Moment) -> Result<[u8; 32], &'static str>;
+    fn cancel_order(order_id: [u8; 32], caller: &AccountId) -> Result<(), &'static str>;
+    fn match_orders() -> Result<(), &'static str>;
+}
+
+pub trait PoPConsensus: Sized {
+    fn validate_transaction(transaction: &PoPTransaction) -> Result<(), &'static str>;
+    fn finalize_transaction(transaction: &PoPTransaction) -> Result<(), &'static str>;
+    fn get_transaction(id: [u8; 32]) -> Result<PoPTransaction, &'static str>;
+}
+
+// ==========================================================================
+// PARTIE 2: SYSTÈME D'ENCHÈRES AVEC INTÉGRATION POP
+// ==========================================================================
+
+// -------------------------------------------------------------------------
+// PARTIE 2.1: VALIDATION DES TRANSACTIONS POP
+// -------------------------------------------------------------------------
+
+/// Fonction pour générer le message standard qui sera signé pour les transactions PoP
+fn generate_pop_message(transaction: &PoPTransaction<T::AccountId, T::BlockNumber>) -> Vec<u8> {
+    // Utilisation de l'encodage SCALE pour garantir la cohérence
+    (
+        transaction.id,
+        transaction.consumer.clone(),
+        transaction.merchant.clone(),
+        transaction.suppliers.clone(),
+        transaction.standard_amount,
+        transaction.tokens_exchanged,
+        transaction.savings_generated,
+        transaction.timestamp,
+        transaction.receipt_hash
+    ).encode()
+}
+
+/// Validation de la transaction PoP avec vérification cryptographique
+fn validate_pop_transaction(transaction: &PoPTransaction<T::AccountId, T::BlockNumber>) -> Result<(), Error<T>> {
+    // Vérifier que la transaction contient au moins deux signatures (consommateur et marchand)
+    ensure!(transaction.signatures.len() >= 2, Error::<T>::InsufficientSignatures);
+    
+    // Générer le message qui a été signé
+    let message = Self::generate_pop_message(transaction);
+    
+    // Vérifier chaque signature
+    for (signer, signature) in &transaction.signatures {
+        // Convertir AccountId en clé publique au format attendu par sr25519_verify
+        let account_id_bytes = signer.encode();
+        
+        // Vérifier si la longueur des bytes correspond à celle d'une clé publique sr25519
+        ensure!(account_id_bytes.len() == 32, Error::<T>::InvalidSignerFormat);
+        
+        // Convertir la signature en tableau de 64 bytes
+        let sig_bytes: [u8; 64] = match signature.try_into() {
+            Ok(array) => array,
+            Err(_) => return Err(Error::<T>::InvalidSignatureFormat),
+        };
+        
+        // Vérifier la signature avec sr25519_verify
+        let is_valid = sp_io::crypto::sr25519_verify(
+            &sig_bytes,
+            &message,
+            &account_id_bytes.try_into().unwrap_or([0u8; 32])
+        );
+        
+        // Si la signature n'est pas valide, retourner une erreur
+        if !is_valid {
+            return Err(Error::<T>::InvalidSignature);
+        }
+    }
+    
+    // Vérifier que le consommateur est bien un signataire
+    let consumer_signed = transaction.signatures.iter()
+        .any(|(signer, _)| signer == &transaction.consumer);
+    
+    ensure!(consumer_signed, Error::<T>::ConsumerSignatureRequired);
+    
+    // Vérifier que le marchand est bien un signataire
+    let merchant_signed = transaction.signatures.iter()
+        .any(|(signer, _)| signer == &transaction.merchant);
+    
+    ensure!(merchant_signed, Error::<T>::MerchantSignatureRequired);
+    
+    // Toutes les vérifications ont réussi
+    Ok(())
+}
+
+// -------------------------------------------------------------------------
+// PARTIE 2.2: ENREGISTREMENT DE L'ADOPTION BASÉE SUR POP
+// -------------------------------------------------------------------------
+
+// Configuration pour la durée d'un bloc
+pub trait Config: frame_system::Config + Sized {
+    // Autres paramètres existants...
+    
+    /// Durée moyenne d'un bloc en millisecondes
+    type BlockDuration: Get<u64>;
+    
+    /// Nombre d'avertissements requis avant une sanction
+    type WarningsBeforeSanction: Get<u32>;
+    
+    /// Durée maximale d'attente pour la validation par les administrateurs (en blocs)
+    type AdminValidationTimeout: Get<Self::BlockNumber>;
+    
+    /// Allocation par défaut de tokens pour les nouvelles enchères
+    type DefaultAuctionTokenAllocation: Get<Balance>;
+}
+
+// Dans parameter_types!
+parameter_types! {
+    // Autres paramètres existants...
+    
+    // Durée moyenne d'un bloc (6 secondes = 6000 ms)
+    pub const BlockDuration: u64 = 6000;
+    
+    // Nombre d'avertissements avant sanction (généralement 1-3)
+    pub const WarningsBeforeSanction: u32 = 2;
+    
+    // Environ 1 jour à 6s par bloc
+    pub const AdminValidationTimeout: u32 = 14400;
+    
+    // Allocation par défaut de tokens pour les enchères
+    pub const DefaultAuctionTokenAllocation: Balance = 100_000;
+}
+
+impl Config for Runtime {
+    // Implémentation existante...
+    
+    type BlockDuration = BlockDuration;
+    type WarningsBeforeSanction = WarningsBeforeSanction;
+    type AdminValidationTimeout = AdminValidationTimeout;
+    type DefaultAuctionTokenAllocation = DefaultAuctionTokenAllocation;
+}
+
+// Fonction pour enregistrer l'adoption basée sur une transaction PoP
+fn register_pop_adoption_evidence(transaction: &PoPTransaction<T::AccountId, T::BlockNumber>) -> DispatchResult {
+    let consumer = &transaction.consumer;
+    let merchant = &transaction.merchant;
+    
+    // Récupérer les catégories sponsorisées
+    let categories = Self::get_all_sponsored_categories();
+    
+    // Pour chaque catégorie où le marchand est sponsor, enregistrer l'adoption
+    for category in categories {
+        if let Some(sponsor_id) = <CategorySponsors<T>>::get(&category) {
+            if sponsor_id == *merchant {
+                // Enregistrer l'adoption
+                <AdoptionStatus<T>>::insert((consumer.clone(), category.clone()), true);
+                
+                // Estimer le numéro de bloc à partir du timestamp
+                // Note: C'est une approximation, documentée comme telle
+                let estimated_block = T::BlockNumber::from(
+                    (transaction.timestamp / T::BlockDuration::get()) as u32
+                );
+                
+                // Mettre à jour la dernière interaction
+                <LastSponsorInteraction<T>>::insert(
+                    (consumer.clone(), category.clone()),
+                    estimated_block
+                );
+                
+                // Mettre à jour le score d'engagement
+                <SponsorEngagementScore<T>>::mutate(
+                    (consumer.clone(), category.clone()),
+                    |score| *score = score.saturating_add(1)
+                );
+                
+                // Émettre un événement
+                Self::deposit_event(RawEvent::SponsorAdoptionRegistered(
+                    consumer.clone(),
+                    category.clone(),
+                    sponsor_id,
+                    estimated_block
+                ));
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+// -------------------------------------------------------------------------
+// PARTIE 2.3: CRÉATION D'ENCHÈRES
+// -------------------------------------------------------------------------
+
+// Fonction interne pour créer une enchère
+fn create_auction_internal(
+    category: Vec<u8>,
+    territory_id: Vec<u8>,
+    start_block: T::BlockNumber,
+    end_block: T::BlockNumber,
+    starting_price: Balance,
+    min_bid_increment: Balance,
+    retry_count: u32
+) -> Result<[u8; 32], Error<T>> {
+    // Vérifier que la catégorie existe
+    ensure!(
+        <Categories<T>>::contains_key(&category),
+        Error::<T>::CategoryNotFound
+    );
+    
+    // Vérifier que le territoire existe
+    ensure!(
+        <Territories<T>>::contains_key(&territory_id) ||
+        territory_id == b"default".to_vec(),
+        Error::<T>::TerritoryNotFound
+    );
+    
+    // Vérifier que la période d'enchère est valide
+    ensure!(end_block > start_block, Error::<T>::InvalidAuctionPeriod);
+    
+    // Vérifier que le prix de départ est valide
+    ensure!(
+        starting_price >= T::MinimumAuctionStartingPrice::get(),
+        Error::<T>::InvalidStartingPrice
+    );
+    
+    // Vérifier qu'aucune enchère active n'existe déjà pour cette catégorie
+    let last_auction_id = <CategoryLastAuction<T>>::get(&category);
+    
+    if let Some(last_auction) = <Auctions<T>>::get(last_auction_id) {
+        if last_auction.status == AuctionStatus::Active || 
+           last_auction.status == AuctionStatus::Pending {
+            return Err(Error::<T>::CategoryAlreadyHasActiveAuction);
+        }
+    }
+    
+    // Générer un nouvel ID pour l'enchère
+    let auction_id = Self::generate_auction_id();
+    
+    // Créer la structure d'enchère
+    let auction = AuctionData {
+        id: auction_id,
+        category: category.clone(),
+        territory_id: territory_id.clone(),
+        start_block,
+        end_block,
+        starting_price,
+        min_bid_increment,
+        status: AuctionStatus::Pending,
+        bid_history: Vec::new(),
+        validating_admins: Vec::new(),
+        admin_validation: false,
+        retry_count,
+        participants: Vec::new(),
+        tokens_allocated: T::DefaultAuctionTokenAllocation::get(),
+        tokens_distributed: 0,
+        finalization_error: None,
+        finalized_at: None,
+    };
+    
+    // Stocker l'enchère
+    <Auctions<T>>::insert(auction_id, auction);
+    
+    // Mettre à jour les métadonnées de la catégorie
+    <Categories<T>>::mutate(&category, |metadata| {
+        if let Some(meta) = metadata {
+            meta.auction_count += 1;
+        }
+    });
+    
+    // Mettre à jour l'ID de la dernière enchère pour cette catégorie
+    <CategoryLastAuction<T>>::insert(category.clone(), auction_id);
+    
+    // Émettre un événement
+    Self::deposit_event(RawEvent::AuctionCreated(
+        auction_id,
+        category,
+        territory_id,
+        starting_price
+    ));
+    
+    Ok(auction_id)
+}
+
+// -------------------------------------------------------------------------
+// PARTIE 2.4: DISTRIBUTION D'ÉPARGNES AVEC PAGINATION
+// -------------------------------------------------------------------------
+
+// Ajout au storage
+decl_storage! {
+    trait Store for Module<T: Config> as EtikaAuctionSystem {
+        // Structures existantes...
+        
+        /// État de la distribution initiale des épargnes (utilisé pour la pagination)
+        InitialSavingsDistributionState get(fn initial_savings_distribution_state): 
+            Option<(Vec<u8>, T::AccountId, u32)>;
+            
+        /// Transactions PoP déjà traitées pour éviter les duplications
+        ProcessedPopTransactions get(fn processed_pop_transaction): 
+            map hasher(blake2_128_concat) [u8; 32] => Option<T::BlockNumber>;
+            
+        /// Avertissements émis aux industriels avant sanction
+        

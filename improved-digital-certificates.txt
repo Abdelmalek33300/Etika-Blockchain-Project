@@ -1,0 +1,128 @@
+// digital-certificates.js (version améliorée)
+// Système de certificats numériques (NFT) sécurisé pour Étika
+
+const { ethers } = require('ethers');
+const { v4: uuidv4 } = require('uuid');
+const axios = require('axios');
+const joi = require('joi'); // Pour la validation des données
+const logger = require('../utils/logger');
+const { logError } = require('../utils/errorTracking');
+const { loadPrivateKey } = require('../utils/keyManager'); // Service pour gérer les clés secrètes
+
+/**
+ * Schémas de validation pour les certificats
+ */
+const validationSchemas = {
+  // Schéma pour la création de certificat
+  createCertificate: joi.object({
+    userId: joi.string().required(),
+    certificateTypeId: joi.string().required(),
+    metadata: joi.object().default({})
+  }),
+  
+  // Schéma pour le type de certificat
+  certificateType: joi.object({
+    name: joi.string().min(3).max(100).required(),
+    description: joi.string().min(10).max(1000).required(),
+    rarity: joi.string().valid('common', 'uncommon', 'rare', 'legendary').default('common'),
+    imagePrompts: joi.array().items(joi.string()).default([]),
+    attributeTemplates: joi.array().items(joi.object()).default([]),
+    ngoPartner: joi.string().allow(null).default(null),
+    maxSupply: joi.number().min(0).default(0)
+  })
+};
+
+/**
+ * Classe pour gérer les certificats numériques (NFT) d'Étika
+ * Utilise une approche hybride: stockage en base de données + blockchain
+ */
+class EtikaDigitalCertificates {
+  constructor(dbProvider, blockchainProvider, imageGenerationService) {
+    this.db = dbProvider;
+    this.blockchain = blockchainProvider; // Polygon, Tezos ou autre blockchain à faible empreinte
+    this.imageService = imageGenerationService;
+    this.certificateTypes = new Map(); // Cache des types de certificats
+    this.retryConfig = {
+      maxRetries: 3,
+      backoffFactor: 1.5,
+      initialDelay: 1000
+    };
+  }
+
+  /**
+   * Initialise les types de certificats disponibles
+   * @returns {Promise<void>}
+   */
+  async initializeCertificateTypes() {
+    try {
+      // Charger les types de certificats depuis la base de données
+      const types = await this.db.certificateTypes.find({});
+      
+      // Mettre en cache pour un accès rapide
+      types.forEach(type => {
+        this.certificateTypes.set(type.id, type);
+      });
+      
+      if (types.length === 0) {
+        // Créer des types par défaut si aucun n'existe
+        await this._createDefaultCertificateTypes();
+      }
+      
+      logger.info(`Initialized ${this.certificateTypes.size} certificate types`);
+    } catch (error) {
+      logError('Error initializing certificate types', error);
+      throw new Error(`Failed to initialize certificate types: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Crée un nouveau certificat numérique pour un utilisateur avec validation
+   * @param {Object} params - Paramètres de création
+   * @returns {Promise<Object>} - Le certificat créé
+   */
+  async createCertificate(params) {
+    try {
+      // Valider les paramètres d'entrée
+      const { error, value } = validationSchemas.createCertificate.validate(params);
+      if (error) {
+        throw new Error(`Invalid certificate data: ${error.message}`);
+      }
+      
+      const { userId, certificateTypeId, metadata } = value;
+      
+      // Vérifier que le type de certificat existe
+      if (!this.certificateTypes.has(certificateTypeId)) {
+        throw new Error(`Certificate type not found: ${certificateTypeId}`);
+      }
+      
+      const certificateType = this.certificateTypes.get(certificateTypeId);
+      
+      // Vérifier que l'utilisateur existe
+      const user = await this.db.users.findOne({ _id: userId });
+      if (!user) {
+        throw new Error(`User not found: ${userId}`);
+      }
+      
+      // Générer un identifiant unique
+      const certificateId = uuidv4();
+      
+      // Générer l'image du certificat avec retry automatique
+      const imageData = await this._retryOperation(
+        () => this._generateCertificateImage(certificateType, userId, metadata),
+        'Image generation'
+      );
+      
+      // Stocker l'image et récupérer l'URL
+      const imageUrl = await this._retryOperation(
+        () => this._storeCertificateImage(certificateId, imageData),
+        'Image storage'
+      );
+      
+      // Préparer les métadonnées du certificat
+      const certificateMetadata = {
+        name: `${certificateType.name} #${certificateId.slice(0, 8)}`,
+        description: certificateType.description,
+        image: imageUrl,
+        attributes: [
+          {
+            trait_type: 'Type

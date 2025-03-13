@@ -1,0 +1,708 @@
+// services/unifiedLoyaltyService.js
+// Service unifié pour gérer les cartes de fidélité (consommateurs ET professionnels)
+
+const Web3 = require('web3');
+const { logError } = require('../utils/errorTracking');
+const { getSecureItem } = require('../utils/secureStorage');
+const EnhancedLoyaltyNFTABI = require('../contracts/EnhancedLoyaltyNFTABI.json');
+const config = require('../config');
+const { BusinessLoyaltyCard } = require('../models/BusinessLoyaltyCard');
+const { Company } = require('../models/Company');
+
+// Types de cartes
+const CARD_TYPES = {
+  CONSUMER: 0,  // Correspond à CardType.CONSUMER dans le smart contract
+  BUSINESS: 1   // Correspond à CardType.BUSINESS dans le smart contract
+};
+
+// Niveaux de cartes
+const CARD_TIERS = {
+  STANDARD: 'standard',
+  SILVER: 'silver',
+  GOLD: 'gold',
+  PLATINUM: 'platinum'
+};
+
+class UnifiedLoyaltyService {
+  constructor() {
+    this.web3 = null;
+    this.contract = null;
+    this.initialized = false;
+    this.initializePromise = null;
+  }
+  
+  /**
+   * Initialise le service et la connexion au contrat blockchain
+   */
+  async initialize() {
+    if (this.initialized) return;
+    
+    // Si une initialisation est déjà en cours, attendre qu'elle se termine
+    if (this.initializePromise) {
+      return this.initializePromise;
+    }
+    
+    this.initializePromise = (async () => {
+      try {
+        // Créer une instance Web3 connectée au réseau Polygon
+        this.web3 = new Web3(config.POLYGON_RPC_URL);
+        
+        // Charger la clé privée pour les transactions (utiliser le service sécurisé)
+        const privateKey = await getSecureItem('ETIKA_OPERATOR_PRIVATE_KEY');
+        
+        if (privateKey) {
+          // Ajouter le compte à l'instance Web3
+          const account = this.web3.eth.accounts.privateKeyToAccount(privateKey);
+          this.web3.eth.accounts.wallet.add(account);
+          this.operatorAddress = account.address;
+        } else {
+          console.warn('No operator private key found, read-only mode enabled');
+          this.operatorAddress = null;
+        }
+        
+        // Créer une instance du contrat
+        this.contract = new this.web3.eth.Contract(
+          EnhancedLoyaltyNFTABI,
+          config.ENHANCED_LOYALTY_NFT_CONTRACT_ADDRESS
+        );
+        
+        this.initialized = true;
+        console.log('UnifiedLoyaltyService initialized successfully');
+      } catch (error) {
+        logError('Failed to initialize UnifiedLoyaltyService', error);
+        throw new Error(`Initialization failed: ${error.message}`);
+      } finally {
+        this.initializePromise = null;
+      }
+    })();
+    
+    return this.initializePromise;
+  }
+  
+  /**
+   * Émet une nouvelle carte de fidélité pour un consommateur
+   * @param {string} userAddress - Adresse blockchain de l'utilisateur
+   * @param {Object} userData - Données de l'utilisateur pour les métadonnées
+   * @returns {Promise<Object>} - Informations sur la carte créée
+   */
+  async issueConsumerCard(userAddress, userData) {
+    await this.initialize();
+    
+    try {
+      // Vérifier si l'utilisateur a déjà une carte
+      const hasCard = await this.contract.methods.hasConsumerCard(userAddress).call();
+      
+      if (hasCard) {
+        throw new Error('User already has a consumer card');
+      }
+      
+      // Générer les métadonnées
+      const metadata = this._generateConsumerMetadata(userData);
+      
+      // Stocker les métadonnées (IPFS ou autre service)
+      const metadataUri = await this._storeMetadata(metadata);
+      
+      // Émettre la carte via le contrat
+      const tx = await this.contract.methods.issueConsumerCard(userAddress, metadataUri).send({
+        from: this.operatorAddress,
+        gas: 500000
+      });
+      
+      // Récupérer l'ID du token à partir de l'événement émis
+      const cardIssuedEvent = tx.events.CardIssued;
+      const tokenId = cardIssuedEvent ? cardIssuedEvent.returnValues.tokenId : null;
+      
+      return {
+        success: true,
+        tokenId,
+        txHash: tx.transactionHash,
+        metadataUri
+      };
+    } catch (error) {
+      logError('Error issuing consumer loyalty card', error);
+      throw new Error(`Failed to issue consumer card: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Émet une nouvelle carte de fidélité pour une entreprise
+   * @param {string} representativeAddress - Adresse du représentant
+   * @param {string} businessAddress - Adresse blockchain de l'entreprise
+   * @param {Object} companyData - Données de l'entreprise
+   * @param {boolean} requiresApproval - Si les transactions nécessitent une approbation
+   * @param {number} dailyLimit - Limite quotidienne (0 = pas de limite)
+   * @returns {Promise<Object>} - Informations sur la carte créée
+   */
+  async issueBusinessCard(representativeAddress, businessAddress, companyData, requiresApproval = false, dailyLimit = 0) {
+    await this.initialize();
+    
+    try {
+      // Vérifier si l'entreprise a déjà une carte
+      const hasCard = await this.contract.methods.hasBusinessCard(businessAddress).call();
+      
+      if (hasCard) {
+        throw new Error('Business already has a card');
+      }
+      
+      // Vérifier que l'entreprise existe dans la base de données
+      const company = await Company.findById(companyData.companyId);
+      if (!company) {
+        throw new Error('Company not found in database');
+      }
+      
+      // Générer les métadonnées
+      const metadata = this._generateBusinessMetadata(companyData);
+      
+      // Stocker les métadonnées
+      const metadataUri = await this._storeMetadata(metadata);
+      
+      // Émettre la carte via le contrat
+      const tx = await this.contract.methods.issueBusinessCard(
+        representativeAddress,
+        businessAddress,
+        metadataUri,
+        requiresApproval,
+        dailyLimit
+      ).send({
+        from: this.operatorAddress,
+        gas: 600000
+      });
+      
+      // Récupérer l'ID du token à partir de l'événement émis
+      const cardIssuedEvent = tx.events.CardIssued;
+      const tokenId = cardIssuedEvent ? cardIssuedEvent.returnValues.tokenId : null;
+      
+      // Enregistrer la carte dans la base de données
+      const businessCard = new BusinessLoyaltyCard({
+        companyId: companyData.companyId,
+        tokenId: tokenId,
+        nftAddress: config.ENHANCED_LOYALTY_NFT_CONTRACT_ADDRESS,
+        status: 'active',
+        tierLevel: 'standard',
+        blockchain: {
+          chainId: config.POLYGON_CHAIN_ID,
+          ownerAddress: representativeAddress,
+          metadataUri: metadataUri,
+          mintTransaction: tx.transactionHash
+        }
+      });
+      
+      await businessCard.save();
+      
+      return {
+        success: true,
+        tokenId,
+        txHash: tx.transactionHash,
+        metadataUri,
+        cardId: businessCard._id
+      };
+    } catch (error) {
+      logError('Error issuing business loyalty card', error);
+      throw new Error(`Failed to issue business card: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Met à jour le niveau d'une carte
+   * @param {string} tokenId - ID du token
+   * @param {string} newTier - Nouveau niveau
+   * @returns {Promise<Object>} - Résultat de la mise à jour
+   */
+  async updateCardTier(tokenId, newTier) {
+    await this.initialize();
+    
+    try {
+      // Vérifier que le token existe
+      const exists = await this._tokenExists(tokenId);
+      if (!exists) {
+        throw new Error('Token does not exist');
+      }
+      
+      // Vérifier que le niveau est valide
+      if (!Object.values(CARD_TIERS).includes(newTier)) {
+        throw new Error('Invalid tier');
+      }
+      
+      // Mettre à jour le niveau via le contrat
+      const tx = await this.contract.methods.updateCardTier(tokenId, newTier).send({
+        from: this.operatorAddress,
+        gas: 200000
+      });
+      
+      // Récupérer les informations de la carte
+      const cardInfo = await this.contract.methods.getCardInfo(tokenId).call();
+      
+      // Si c'est une carte professionnelle, mettre à jour également dans la base de données
+      if (parseInt(cardInfo.cardType) === CARD_TYPES.BUSINESS) {
+        const businessCard = await BusinessLoyaltyCard.findOne({ tokenId });
+        if (businessCard) {
+          businessCard.tierLevel = newTier;
+          await businessCard.save();
+        }
+      }
+      
+      return {
+        success: true,
+        txHash: tx.transactionHash,
+        tokenId,
+        newTier
+      };
+    } catch (error) {
+      logError('Error updating card tier', error);
+      throw new Error(`Failed to update card tier: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Ajoute des avoirs à une carte de fidélité
+   * @param {string} tokenId - ID du token NFT
+   * @param {string} sectorId - ID du secteur
+   * @param {number} amount - Montant à ajouter
+   * @returns {Promise<Object>} - Résultat de la transaction
+   */
+  async addBalance(tokenId, sectorId, amount) {
+    await this.initialize();
+    
+    try {
+      // Vérifier que le token existe
+      const exists = await this._tokenExists(tokenId);
+      if (!exists) {
+        throw new Error('Token does not exist');
+      }
+      
+      // Ajouter le solde via le contrat
+      const tx = await this.contract.methods.addBalance(tokenId, sectorId, amount).send({
+        from: this.operatorAddress,
+        gas: 200000
+      });
+      
+      // Récupérer les informations de la carte
+      const cardInfo = await this.contract.methods.getCardInfo(tokenId).call();
+      
+      // Si c'est une carte professionnelle, mettre à jour également dans la base de données
+      if (parseInt(cardInfo.cardType) === CARD_TYPES.BUSINESS) {
+        const businessCard = await BusinessLoyaltyCard.findOne({ tokenId });
+        if (businessCard) {
+          await businessCard.addBalance(sectorId, amount, {
+            transactionId: `tx-${Date.now()}`,
+            transactionHash: tx.transactionHash,
+            description: 'Ajout d\'avoirs'
+          });
+        }
+      }
+      
+      return {
+        success: true,
+        txHash: tx.transactionHash,
+        tokenId,
+        sectorId,
+        amount
+      };
+    } catch (error) {
+      logError('Error adding balance to loyalty card', error);
+      throw new Error(`Failed to add balance: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Utilise des avoirs d'une carte de fidélité
+   * @param {string} tokenId - ID du token NFT
+   * @param {string} sectorId - ID du secteur
+   * @param {number} amount - Montant à dépenser
+   * @param {string} recipient - Adresse du destinataire
+   * @returns {Promise<Object>} - Résultat de la transaction
+   */
+  async spendBalance(tokenId, sectorId, amount, recipient) {
+    await this.initialize();
+    
+    try {
+      // Vérifier que le token existe
+      const exists = await this._tokenExists(tokenId);
+      if (!exists) {
+        throw new Error('Token does not exist');
+      }
+      
+      // Vérifier que le solde est suffisant
+      const balance = await this.getSectorBalance(tokenId, sectorId);
+      if (balance < amount) {
+        throw new Error('Insufficient balance');
+      }
+      
+      // Dépenser le solde via le contrat
+      const tx = await this.contract.methods.spendBalance(tokenId, sectorId, amount, recipient).send({
+        from: this.operatorAddress,
+        gas: 200000
+      });
+      
+      // Vérifier si la transaction a réussi
+      const success = tx.events.BalanceSpent !== undefined;
+      
+      if (success) {
+        // Récupérer les informations de la carte
+        const cardInfo = await this.contract.methods.getCardInfo(tokenId).call();
+        
+        // Si c'est une carte professionnelle, mettre à jour également dans la base de données
+        if (parseInt(cardInfo.cardType) === CARD_TYPES.BUSINESS) {
+          const businessCard = await BusinessLoyaltyCard.findOne({ tokenId });
+          if (businessCard) {
+            await businessCard.spendBalance(sectorId, amount, {
+              transactionId: `tx-${Date.now()}`,
+              transactionHash: tx.transactionHash,
+              sponsorId: recipient,
+              description: 'Utilisation d\'avoirs'
+            });
+          }
+        }
+      } else {
+        // La transaction a été rejetée par le contrat
+        throw new Error('Transaction rejected by the contract');
+      }
+      
+      return {
+        success,
+        txHash: tx.transactionHash,
+        tokenId,
+        sectorId,
+        amount,
+        recipient
+      };
+    } catch (error) {
+      logError('Error spending balance from loyalty card', error);
+      throw new Error(`Failed to spend balance: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Récupère le solde d'un secteur pour une carte
+   * @param {string} tokenId - ID du token NFT
+   * @param {string} sectorId - ID du secteur
+   * @returns {Promise<number>} - Solde disponible
+   */
+  async getSectorBalance(tokenId, sectorId) {
+    await this.initialize();
+    
+    try {
+      const result = await this.contract.methods.getSectorBalance(tokenId, sectorId).call();
+      return parseInt(result.balance || 0);
+    } catch (error) {
+      logError('Error getting sector balance', error);
+      return 0;
+    }
+  }
+  
+  /**
+   * Récupère les détails complets d'une carte de fidélité
+   * @param {string} tokenId - ID du token NFT
+   * @returns {Promise<Object>} - Détails de la carte
+   */
+  async getCardDetails(tokenId) {
+    await this.initialize();
+    
+    try {
+      // Vérifier que le token existe
+      const exists = await this._tokenExists(tokenId);
+      if (!exists) {
+        throw new Error('Token does not exist');
+      }
+      
+      // Récupérer le propriétaire
+      const owner = await this.contract.methods.ownerOf(tokenId).call();
+      
+      // Récupérer les informations de la carte
+      const cardInfo = await this.contract.methods.getCardInfo(tokenId).call();
+      
+      // Récupérer l'URI des métadonnées
+      const metadataUri = await this.contract.methods.tokenURI(tokenId).call();
+      
+      // Récupérer les métadonnées
+      const metadata = await this._fetchMetadata(metadataUri);
+      
+      // Récupérer les secteurs actifs
+      const activeSectors = await this.contract.methods.getActiveSectors().call();
+      
+      // Récupérer les soldes pour chaque secteur
+      const balances = {};
+      
+      for (const sectorId of activeSectors) {
+        const sectorBalance = await this.contract.methods.getSectorBalance(tokenId, sectorId).call();
+        const sectorInfo = await this.contract.methods.getSectorInfo(sectorId).call();
+        
+        balances[sectorId] = {
+          sectorId,
+          name: sectorInfo.name,
+          balance: parseInt(sectorBalance.balance),
+          totalEarned: parseInt(sectorBalance.totalEarned),
+          totalSpent: parseInt(sectorBalance.totalSpent),
+          lastActivity: sectorBalance.lastActivity > 0 ? new Date(parseInt(sectorBalance.lastActivity) * 1000) : null
+        };
+      }
+      
+      // Préparer la réponse de base
+      const result = {
+        tokenId,
+        owner,
+        type: parseInt(cardInfo.cardType) === CARD_TYPES.CONSUMER ? 'consumer' : 'business',
+        tier: cardInfo.tier,
+        issuedAt: new Date(parseInt(cardInfo.issuedAt) * 1000),
+        expiresAt: new Date(parseInt(cardInfo.expiresAt) * 1000),
+        metadataUri,
+        metadata,
+        balances
+      };
+      
+      // Si c'est une carte professionnelle, ajouter des infos supplémentaires
+      if (parseInt(cardInfo.cardType) === CARD_TYPES.BUSINESS) {
+        result.businessAddress = cardInfo.businessAddress;
+        result.requiresApproval = cardInfo.requiresApproval;
+        result.dailyLimit = parseInt(cardInfo.dailyLimit);
+        
+        // Récupérer les dépenses quotidiennes
+        const dailySpending = await this.contract.methods.getDailySpending(tokenId).call();
+        result.dailySpending = {
+          date: new Date(parseInt(dailySpending.date) * 86400 * 1000), // convertir jours en millisecondes
+          amount: parseInt(dailySpending.amount)
+        };
+        
+        // Récupérer les informations supplémentaires depuis la base de données
+        const businessCard = await BusinessLoyaltyCard.findOne({ tokenId }).populate('companyId');
+        if (businessCard) {
+          result.company = businessCard.companyId;
+          result.recentTransactions = businessCard.recentTransactions;
+          result.restrictions = businessCard.restrictions;
+          result.benefitsEnabled = businessCard.benefitsEnabled;
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      logError('Error getting card details', error);
+      throw new Error(`Failed to get card details: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Récupère l'ID du token pour un utilisateur consommateur
+   * @param {string} userAddress - Adresse de l'utilisateur
+   * @returns {Promise<string|null>} - ID du token ou null
+   */
+  async getTokenIdForConsumer(userAddress) {
+    await this.initialize();
+    
+    try {
+      const hasCard = await this.contract.methods.hasConsumerCard(userAddress).call();
+      
+      if (!hasCard) {
+        return null;
+      }
+      
+      const tokenId = await this.contract.methods.getTokenIdForOwner(userAddress).call();
+      return tokenId > 0 ? tokenId : null;
+    } catch (error) {
+      logError('Error getting token ID for consumer', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Récupère l'ID du token pour une entreprise
+   * @param {string} businessAddress - Adresse de l'entreprise
+   * @returns {Promise<string|null>} - ID du token ou null
+   */
+  async getTokenIdForBusiness(businessAddress) {
+    await this.initialize();
+    
+    try {
+      const hasCard = await this.contract.methods.hasBusinessCard(businessAddress).call();
+      
+      if (!hasCard) {
+        return null;
+      }
+      
+      // Chercher dans la base de données pour plus d'efficacité
+      const businessCard = await BusinessLoyaltyCard.findOne({
+        'blockchain.ownerAddress': businessAddress
+      });
+      
+      if (businessCard) {
+        return businessCard.tokenId;
+      }
+      
+      // Fallback: parcourir tous les tokens de l'entreprise (moins efficace)
+      const businessCards = await BusinessLoyaltyCard.find({});
+      for (const card of businessCards) {
+        try {
+          const cardInfo = await this.contract.methods.getCardInfo(card.tokenId).call();
+          if (cardInfo.businessAddress === businessAddress) {
+            return card.tokenId;
+          }
+        } catch (e) {
+          // Ignorer les erreurs et continuer
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      logError('Error getting token ID for business', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Vérifie si un token existe
+   * @param {string} tokenId - ID du token
+   * @returns {Promise<boolean>}
+   */
+  async _tokenExists(tokenId) {
+    try {
+      await this.contract.methods.ownerOf(tokenId).call();
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+  
+  /**
+   * Génère les métadonnées pour une carte de fidélité consommateur
+   * @param {Object} userData - Données de l'utilisateur
+   * @returns {Object} - Métadonnées formatées
+   */
+  _generateConsumerMetadata(userData) {
+    return {
+      name: "Étika Consumer Loyalty Card",
+      description: "Carte de fidélité Étika pour les consommateurs participants",
+      image: `${config.API_URL}/images/consumer-card.png`,
+      external_url: `${config.APP_URL}/card/consumer`,
+      attributes: [
+        {
+          trait_type: "Card Type",
+          value: "Consumer"
+        },
+        {
+          trait_type: "Issued Date",
+          value: new Date().toISOString().split('T')[0]
+        },
+        {
+          trait_type: "User ID",
+          value: userData.userId || ""
+        },
+        {
+          trait_type: "User Level",
+          value: userData.level || "Standard"
+        }
+      ]
+    };
+  }
+  
+  /**
+   * Génère les métadonnées pour une carte de fidélité professionnelle
+   * @param {Object} companyData - Données de l'entreprise
+   * @returns {Object} - Métadonnées formatées
+   */
+  _generateBusinessMetadata(companyData) {
+    return {
+      name: "Étika Business Loyalty Card",
+      description: "Carte de fidélité Étika pour les entreprises participantes",
+      image: `${config.API_URL}/images/business-card.png`,
+      external_url: `${config.APP_URL}/card/business`,
+      attributes: [
+        {
+          trait_type: "Card Type",
+          value: "Business"
+        },
+        {
+          trait_type: "Issued Date",
+          value: new Date().toISOString().split('T')[0]
+        },
+        {
+          trait_type: "Company ID",
+          value: companyData.companyId || ""
+        },
+        {
+          trait_type: "Company Name",
+          value: companyData.name || ""
+        },
+        {
+          trait_type: "Industry",
+          value: companyData.industry || "Other"
+        },
+        {
+          trait_type: "Card Level",
+          value: "Standard"
+        }
+      ]
+    };
+  }
+  
+  /**
+   * Stocke les métadonnées (sur IPFS ou autre service)
+   * @param {Object} metadata - Métadonnées à stocker
+   * @returns {Promise<string>} - URI des métadonnées
+   */
+  async _storeMetadata(metadata) {
+    try {
+      // Cette implémentation stockerait normalement les métadonnées sur IPFS
+      // Pour la version de test, on stocke dans notre propre API
+      const response = await fetch(`${config.API_URL}/api/metadata/store`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await getSecureItem('API_TOKEN')}`
+        },
+        body: JSON.stringify(metadata)
+      });
+      
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to store metadata');
+      }
+      
+      return data.metadataUri;
+    } catch (error) {
+      logError('Error storing metadata', error);
+      throw new Error(`Failed to store metadata: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Récupère les métadonnées depuis leur URI
+   * @param {string} uri - URI des métadonnées
+   * @returns {Promise<Object>} - Métadonnées
+   */
+  async _fetchMetadata(uri) {
+    try {
+      // Si l'URI est une URL HTTP, faire une requête
+      if (uri.startsWith('http')) {
+        const response = await fetch(uri);
+        return await response.json();
+      }
+      
+      // Si c'est une URI IPFS, utiliser une passerelle IPFS
+      if (uri.startsWith('ipfs://')) {
+        const ipfsHash = uri.replace('ipfs://', '');
+        const gatewayUrl = `${config.IPFS_GATEWAY}/${ipfsHash}`;
+        const response = await fetch(gatewayUrl);
+        return await response.json();
+      }
+      
+      // Si c'est stocké localement, récupérer depuis notre API
+      if (uri.startsWith('etika://')) {
+        const metadataId = uri.replace('etika://', '');
+        const response = await fetch(`${config.API_URL}/api/metadata/${metadataId}`);
+        return await response.json();
+      }
+      
+      throw new Error(`Unsupported metadata URI: ${uri}`);
+    } catch (error) {
+      logError('Error fetching metadata', error);
+      return {};
+    }
+  }
+}
+
+// Exporter une instance unique du service ainsi que les constantes
+module.exports = {
+  unifiedLoyaltyService: new UnifiedLoyaltyService(),
+  CARD_TYPES,
+  CARD_TIERS
+};

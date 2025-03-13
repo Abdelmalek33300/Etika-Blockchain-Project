@@ -1,0 +1,354 @@
+// controllers/auctionFinalizationController.js
+// Contrôleur pour les endpoints d'API liés à la finalisation des enchères
+
+const express = require('express');
+const router = express.Router();
+const { body, param, validationResult } = require('express-validator');
+const { isAuthenticated, isAdmin } = require('../middleware/authMiddleware');
+const logger = require('../utils/logger');
+
+/**
+ * @route POST /api/auctions/:id/finalize
+ * @desc Démarre ou reprend manuellement la finalisation d'une enchère
+ * @access Admin seulement
+ */
+router.post(
+  '/:id/finalize',
+  [
+    isAuthenticated,
+    isAdmin,
+    param('id').isString().notEmpty().withMessage('L\'ID de l\'enchère est requis'),
+    body('overrideOptions').optional().isObject(),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+    
+    const { id } = req.params;
+    const { overrideOptions } = req.body;
+    
+    try {
+      const finalizationService = req.services.auctionFinalization;
+      
+      // Démarrer ou reprendre la finalisation
+      const result = await finalizationService.adminResumeFinalization(
+        id,
+        req.user.id,
+        overrideOptions || {}
+      );
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Finalisation démarrée/reprise avec succès',
+        result
+      });
+    } catch (error) {
+      logger.error(`Erreur lors de la finalisation de l'enchère ${id}:`, error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la finalisation',
+        error: error.message
+      });
+    }
+  }
+);
+
+/**
+ * @route GET /api/auctions/:id/finalization-status
+ * @desc Récupère l'état actuel de la finalisation d'une enchère
+ * @access Admin seulement
+ */
+router.get(
+  '/:id/finalization-status',
+  [
+    isAuthenticated,
+    isAdmin,
+    param('id').isString().notEmpty().withMessage('L\'ID de l\'enchère est requis'),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+    
+    const { id } = req.params;
+    
+    try {
+      // Récupérer l'enchère avec ses détails de finalisation
+      const auction = await req.db.auctions.findOne({ _id: id });
+      
+      if (!auction) {
+        return res.status(404).json({
+          success: false,
+          message: 'Enchère non trouvée'
+        });
+      }
+      
+      // Enrichir les détails de finalisation si nécessaire
+      let finalizationDetails = auction.finalization || { state: 'not_started' };
+      
+      if (auction.status === 'active' && auction.endTime <= new Date()) {
+        finalizationDetails = {
+          ...finalizationDetails,
+          actionNeeded: 'start_finalization',
+          message: 'L\'enchère est terminée mais la finalisation n\'a pas commencé'
+        };
+      }
+      
+      return res.status(200).json({
+        success: true,
+        auction: {
+          id: auction._id,
+          title: auction.title,
+          category: auction.category,
+          status: auction.status,
+          endTime: auction.endTime,
+          finalization: finalizationDetails
+        }
+      });
+    } catch (error) {
+      logger.error(`Erreur lors de la récupération du statut de finalisation pour l'enchère ${id}:`, error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la récupération du statut',
+        error: error.message
+      });
+    }
+  }
+);
+
+/**
+ * @route POST /api/auctions/:id/force-reselect-winner
+ * @desc Force une nouvelle sélection de gagnant (en cas de problème)
+ * @access Admin seulement
+ */
+router.post(
+  '/:id/force-reselect-winner',
+  [
+    isAuthenticated,
+    isAdmin,
+    param('id').isString().notEmpty().withMessage('L\'ID de l\'enchère est requis'),
+    body('excludeBidderIds').optional().isArray(),
+    body('specificBidderId').optional().isString(),
+    body('reason').isString().notEmpty().withMessage('Une raison est requise')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+    
+    const { id } = req.params;
+    const { excludeBidderIds, specificBidderId, reason } = req.body;
+    
+    try {
+      const auction = await req.db.auctions.findOne({ _id: id });
+      
+      if (!auction) {
+        return res.status(404).json({
+          success: false,
+          message: 'Enchère non trouvée'
+        });
+      }
+      
+      if (!['payment_pending', 'admin_review'].includes(auction.status)) {
+        return res.status(400).json({
+          success: false,
+          message: `L'enchère est en statut ${auction.status} et ne peut pas changer de gagnant`
+        });
+      }
+      
+      // Mettre à jour le statut de l'enchère actuelle
+      if (auction.finalization?.winningBid) {
+        await req.db.bids.updateOne(
+          { _id: auction.finalization.winningBid },
+          { $set: { 
+              status: 'disqualified', 
+              disqualificationReason: `Admin intervention: ${reason}` 
+            } 
+          }
+        );
+      }
+      
+      // Construire les options pour la résolution manuelle
+      const overrideOptions = {
+        forceWinner: true,
+        manualReason: reason
+      };
+      
+      // Si un enchérisseur spécifique est fourni, l'utiliser comme nouveau gagnant
+      if (specificBidderId) {
+        overrideOptions.newWinnerId = specificBidderId;
+      } 
+      // Sinon, filtrer les enchères pour trouver le prochain gagnant
+      else {
+        // Trouver la prochaine enchère la plus élevée
+        const query = { 
+          auctionId: id, 
+          status: 'active' 
+        };
+        
+        // Exclure les enchérisseurs spécifiés
+        if (excludeBidderIds && excludeBidderIds.length > 0) {
+          query.bidderId = { $nin: excludeBidderIds };
+          
+          // Ajouter l'ancien gagnant à la liste d'exclusion
+          if (auction.finalization?.winnerId) {
+            if (!query.bidderId.$nin.includes(auction.finalization.winnerId)) {
+              query.bidderId.$nin.push(auction.finalization.winnerId);
+            }
+          }
+        } 
+        // Sinon, exclure juste l'ancien gagnant
+        else if (auction.finalization?.winnerId) {
+          query.bidderId = { $ne: auction.finalization.winnerId };
+        }
+        
+        const nextBid = await req.db.bids
+          .find(query)
+          .sort({ amount: -1 })
+          .limit(1)
+          .toArray();
+        
+        if (nextBid.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Aucune enchère valide disponible pour une nouvelle sélection'
+          });
+        }
+        
+        overrideOptions.newWinnerId = nextBid[0].bidderId;
+      }
+      
+      // Appeler le service de finalisation pour reprendre avec le nouveau gagnant
+      const finalizationService = req.services.auctionFinalization;
+      const result = await finalizationService.adminResumeFinalization(
+        id,
+        req.user.id,
+        overrideOptions
+      );
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Nouveau gagnant sélectionné avec succès',
+        result
+      });
+    } catch (error) {
+      logger.error(`Erreur lors de la resélection du gagnant pour l'enchère ${id}:`, error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la resélection',
+        error: error.message
+      });
+    }
+  }
+);
+
+/**
+ * @route POST /api/auctions/:id/mark-payment-complete
+ * @desc Marque manuellement le paiement comme complété (bypass du processus de paiement)
+ * @access Admin seulement
+ */
+router.post(
+  '/:id/mark-payment-complete',
+  [
+    isAuthenticated,
+    isAdmin,
+    param('id').isString().notEmpty().withMessage('L\'ID de l\'enchère est requis'),
+    body('reason').isString().notEmpty().withMessage('Une raison est requise'),
+    body('paymentReference').optional().isString()
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+    
+    const { id } = req.params;
+    const { reason, paymentReference } = req.body;
+    
+    try {
+      const finalizationService = req.services.auctionFinalization;
+      
+      // Override pour marquer le paiement comme complété
+      const result = await finalizationService.adminResumeFinalization(
+        id,
+        req.user.id,
+        { 
+          skipPayment: true, 
+          paymentId: paymentReference || `manual-payment-${Date.now()}`,
+          paymentMethod: 'manual-admin',
+          reason
+        }
+      );
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Paiement marqué comme complété',
+        result
+      });
+    } catch (error) {
+      logger.error(`Erreur lors du marquage manuel du paiement pour l'enchère ${id}:`, error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur lors du marquage du paiement',
+        error: error.message
+      });
+    }
+  }
+);
+
+/**
+ * @route POST /api/auctions/:id/mark-failed
+ * @desc Marque manuellement l'enchère comme échouée
+ * @access Admin seulement
+ */
+router.post(
+  '/:id/mark-failed',
+  [
+    isAuthenticated,
+    isAdmin,
+    param('id').isString().notEmpty().withMessage('L\'ID de l\'enchère est requis'),
+    body('reason').isString().notEmpty().withMessage('Une raison est requise')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
+    }
+    
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    try {
+      const finalizationService = req.services.auctionFinalization;
+      
+      // Override pour marquer l'enchère comme échouée
+      const result = await finalizationService.adminResumeFinalization(
+        id,
+        req.user.id,
+        { 
+          markFailed: true, 
+          failureReason: `Admin manual intervention: ${reason}`
+        }
+      );
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Enchère marquée comme échouée',
+        result
+      });
+    } catch (error) {
+      logger.error(`Erreur lors du marquage de l'échec pour l'enchère ${id}:`, error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur lors du marquage de l\'échec',
+        error: error.message
+      });
+    }
+  }
+);
+
+module.exports = router;

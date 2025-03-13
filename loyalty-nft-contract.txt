@@ -1,0 +1,379 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.9;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+
+/// @title LoyaltyNFT - Super carte de fidélité blockchain pour Etika
+/// @notice Ce contrat gère les NFTs uniques par participant avec avoirs multi-secteurs
+contract LoyaltyNFT is ERC721, ERC721Enumerable, ERC721URIStorage, AccessControl, Pausable {
+    using Counters for Counters.Counter;
+
+    // Rôles pour la gestion des autorisations
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant SPONSOR_ROLE = keccak256("SPONSOR_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+
+    Counters.Counter private _tokenIdCounter;
+    
+    // Structure pour stocker les informations sectorielles d'un NFT
+    struct SectorBalance {
+        uint256 balance;      // Solde disponible pour ce secteur
+        uint256 totalSpent;   // Total dépensé dans ce secteur
+        uint256 lastActivity; // Timestamp de la dernière activité
+    }
+    
+    // Structure pour stocker les informations sur un secteur
+    struct Sector {
+        string name;
+        string description;
+        address sponsorAddress; // Adresse du sponsor lauréat pour ce secteur
+        bool active;            // Si le secteur est actif
+        uint256 createdAt;
+    }
+    
+    // Mapping tokenId => sectorId => SectorBalance
+    mapping(uint256 => mapping(uint256 => SectorBalance)) private _sectorBalances;
+    
+    // Mapping utilisateur => a un NFT
+    mapping(address => bool) private _hasLoyaltyCard;
+    
+    // Mapping des secteurs par ID
+    mapping(uint256 => Sector) private _sectors;
+    
+    // Liste des IDs de secteurs actifs
+    uint256[] private _activeSectorIds;
+    
+    // Compteur pour les IDs de secteurs
+    Counters.Counter private _sectorIdCounter;
+    
+    // Événements
+    event BalanceAdded(uint256 indexed tokenId, uint256 indexed sectorId, uint256 amount);
+    event BalanceSpent(uint256 indexed tokenId, uint256 indexed sectorId, uint256 amount);
+    event SectorAdded(uint256 indexed sectorId, string name, address sponsorAddress);
+    event SectorUpdated(uint256 indexed sectorId, string name, address sponsorAddress, bool active);
+    event CardIssued(address indexed to, uint256 indexed tokenId);
+
+    /// @notice Initialise le contrat avec les noms et symboles du NFT
+    constructor() ERC721("EtikaLoyaltyCard", "ELC") {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
+    }
+
+    /// @notice Crée un nouveau secteur
+    /// @param name Nom du secteur
+    /// @param description Description du secteur
+    /// @param sponsorAddress Adresse du sponsor lauréat
+    /// @return sectorId ID du nouveau secteur créé
+    function createSector(
+        string memory name,
+        string memory description,
+        address sponsorAddress
+    ) public onlyRole(ADMIN_ROLE) returns (uint256) {
+        _sectorIdCounter.increment();
+        uint256 sectorId = _sectorIdCounter.current();
+        
+        _sectors[sectorId] = Sector({
+            name: name,
+            description: description,
+            sponsorAddress: sponsorAddress,
+            active: true,
+            createdAt: block.timestamp
+        });
+        
+        _activeSectorIds.push(sectorId);
+        
+        // Attribuer le rôle de sponsor à l'adresse du sponsor
+        _grantRole(SPONSOR_ROLE, sponsorAddress);
+        
+        emit SectorAdded(sectorId, name, sponsorAddress);
+        
+        return sectorId;
+    }
+    
+    /// @notice Met à jour les informations d'un secteur existant
+    /// @param sectorId ID du secteur à mettre à jour
+    /// @param name Nouveau nom du secteur
+    /// @param description Nouvelle description
+    /// @param sponsorAddress Nouvelle adresse du sponsor
+    /// @param active Si le secteur est actif ou non
+    function updateSector(
+        uint256 sectorId,
+        string memory name,
+        string memory description,
+        address sponsorAddress,
+        bool active
+    ) public onlyRole(ADMIN_ROLE) {
+        require(_sectors[sectorId].createdAt > 0, "Sector does not exist");
+        
+        // Si le sponsor change, mettre à jour les rôles
+        if (_sectors[sectorId].sponsorAddress != sponsorAddress) {
+            // Révoquer l'ancien sponsor si nécessaire
+            if (!_hasSponsorOtherSectors(_sectors[sectorId].sponsorAddress, sectorId)) {
+                revokeRole(SPONSOR_ROLE, _sectors[sectorId].sponsorAddress);
+            }
+            
+            // Accorder le rôle au nouveau sponsor
+            _grantRole(SPONSOR_ROLE, sponsorAddress);
+        }
+        
+        // Mettre à jour les informations du secteur
+        _sectors[sectorId].name = name;
+        _sectors[sectorId].description = description;
+        _sectors[sectorId].sponsorAddress = sponsorAddress;
+        
+        // Gérer l'activation/désactivation
+        if (_sectors[sectorId].active != active) {
+            _sectors[sectorId].active = active;
+            
+            // Mettre à jour la liste des secteurs actifs
+            if (active) {
+                _activeSectorIds.push(sectorId);
+            } else {
+                _removeFromActiveSectors(sectorId);
+            }
+        }
+        
+        emit SectorUpdated(sectorId, name, sponsorAddress, active);
+    }
+    
+    /// @notice Vérifie si une adresse est sponsor pour d'autres secteurs
+    /// @param sponsorAddress Adresse du sponsor à vérifier
+    /// @param excludeSectorId Secteur à exclure de la vérification
+    /// @return true si l'adresse est sponsor pour d'autres secteurs
+    function _hasSponsorOtherSectors(address sponsorAddress, uint256 excludeSectorId) private view returns (bool) {
+        for (uint256 i = 0; i < _activeSectorIds.length; i++) {
+            uint256 sectorId = _activeSectorIds[i];
+            if (sectorId != excludeSectorId && _sectors[sectorId].sponsorAddress == sponsorAddress) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /// @notice Retire un secteur de la liste des secteurs actifs
+    /// @param sectorId ID du secteur à retirer
+    function _removeFromActiveSectors(uint256 sectorId) private {
+        for (uint256 i = 0; i < _activeSectorIds.length; i++) {
+            if (_activeSectorIds[i] == sectorId) {
+                // Déplacer le dernier élément à la place de celui à supprimer
+                _activeSectorIds[i] = _activeSectorIds[_activeSectorIds.length - 1];
+                // Supprimer le dernier élément
+                _activeSectorIds.pop();
+                break;
+            }
+        }
+    }
+    
+    /// @notice Émet une nouvelle carte de fidélité NFT pour un utilisateur
+    /// @param to Adresse du destinataire
+    /// @param metadataURI URI des métadonnées pour le NFT
+    /// @return tokenId ID du token émis
+    function issueCard(address to, string memory metadataURI) 
+        public 
+        onlyRole(OPERATOR_ROLE) 
+        whenNotPaused 
+        returns (uint256) 
+    {
+        require(!_hasLoyaltyCard[to], "Address already has a loyalty card");
+        
+        _tokenIdCounter.increment();
+        uint256 tokenId = _tokenIdCounter.current();
+        
+        _safeMint(to, tokenId);
+        _setTokenURI(tokenId, metadataURI);
+        
+        _hasLoyaltyCard[to] = true;
+        
+        emit CardIssued(to, tokenId);
+        
+        return tokenId;
+    }
+    
+    /// @notice Ajoute des avoirs à un secteur spécifique pour un NFT
+    /// @param tokenId ID du NFT
+    /// @param sectorId ID du secteur
+    /// @param amount Montant à ajouter
+    function addBalance(
+        uint256 tokenId, 
+        uint256 sectorId, 
+        uint256 amount
+    ) 
+        public 
+        onlyRole(OPERATOR_ROLE) 
+        whenNotPaused 
+    {
+        require(_exists(tokenId), "Token does not exist");
+        require(_sectors[sectorId].active, "Sector is not active");
+        
+        _sectorBalances[tokenId][sectorId].balance += amount;
+        _sectorBalances[tokenId][sectorId].lastActivity = block.timestamp;
+        
+        emit BalanceAdded(tokenId, sectorId, amount);
+    }
+    
+    /// @notice Dépense des avoirs d'un secteur spécifique pour un NFT
+    /// @param tokenId ID du NFT
+    /// @param sectorId ID du secteur
+    /// @param amount Montant à dépenser
+    function spendBalance(
+        uint256 tokenId, 
+        uint256 sectorId, 
+        uint256 amount
+    ) 
+        public 
+        whenNotPaused 
+    {
+        require(_exists(tokenId), "Token does not exist");
+        require(_sectors[sectorId].active, "Sector is not active");
+        require(_sectorBalances[tokenId][sectorId].balance >= amount, "Insufficient balance");
+        
+        // Vérifier que le sponsor est celui qui appelle la fonction ou un opérateur autorisé
+        require(
+            hasRole(OPERATOR_ROLE, msg.sender) || 
+            _sectors[sectorId].sponsorAddress == msg.sender,
+            "Not authorized to spend"
+        );
+        
+        _sectorBalances[tokenId][sectorId].balance -= amount;
+        _sectorBalances[tokenId][sectorId].totalSpent += amount;
+        _sectorBalances[tokenId][sectorId].lastActivity = block.timestamp;
+        
+        emit BalanceSpent(tokenId, sectorId, amount);
+    }
+    
+    /// @notice Obtient le solde pour un secteur spécifique d'un NFT
+    /// @param tokenId ID du NFT
+    /// @param sectorId ID du secteur
+    /// @return balance Solde disponible
+    /// @return totalSpent Total dépensé
+    /// @return lastActivity Timestamp de la dernière activité
+    function getSectorBalance(uint256 tokenId, uint256 sectorId) 
+        public 
+        view 
+        returns (uint256 balance, uint256 totalSpent, uint256 lastActivity) 
+    {
+        require(_exists(tokenId), "Token does not exist");
+        
+        SectorBalance memory sb = _sectorBalances[tokenId][sectorId];
+        return (sb.balance, sb.totalSpent, sb.lastActivity);
+    }
+    
+    /// @notice Obtient les informations d'un secteur
+    /// @param sectorId ID du secteur
+    /// @return name Nom du secteur
+    /// @return description Description du secteur
+    /// @return sponsorAddress Adresse du sponsor lauréat
+    /// @return active Si le secteur est actif
+    /// @return createdAt Timestamp de création du secteur
+    function getSectorInfo(uint256 sectorId) 
+        public 
+        view 
+        returns (
+            string memory name,
+            string memory description,
+            address sponsorAddress,
+            bool active,
+            uint256 createdAt
+        ) 
+    {
+        Sector memory sector = _sectors[sectorId];
+        return (
+            sector.name,
+            sector.description,
+            sector.sponsorAddress,
+            sector.active,
+            sector.createdAt
+        );
+    }
+    
+    /// @notice Obtient tous les secteurs actifs
+    /// @return sectorIds Liste des IDs de secteurs actifs
+    function getActiveSectors() public view returns (uint256[] memory) {
+        return _activeSectorIds;
+    }
+    
+    /// @notice Vérifie si une adresse possède déjà une carte de fidélité
+    /// @param owner Adresse à vérifier
+    /// @return true si l'adresse possède une carte de fidélité
+    function hasLoyaltyCard(address owner) public view returns (bool) {
+        return _hasLoyaltyCard[owner];
+    }
+    
+    /// @notice Obtient l'ID du token pour un propriétaire (s'il en possède un)
+    /// @param owner Adresse du propriétaire
+    /// @return tokenId ID du token ou 0 si aucun
+    function getTokenIdForOwner(address owner) public view returns (uint256) {
+        if (!_hasLoyaltyCard[owner]) {
+            return 0;
+        }
+        
+        uint256 balance = balanceOf(owner);
+        if (balance == 0) {
+            return 0;
+        }
+        
+        // On suppose qu'un utilisateur ne peut avoir qu'une seule carte de fidélité
+        return tokenOfOwnerByIndex(owner, 0);
+    }
+    
+    /// @notice Met le contrat en pause
+    function pause() public onlyRole(ADMIN_ROLE) {
+        _pause();
+    }
+    
+    /// @notice Redémarre le contrat après une pause
+    function unpause() public onlyRole(ADMIN_ROLE) {
+        _unpause();
+    }
+    
+    // Fonctions requises par les contrats hérités
+    
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize)
+        internal
+        override(ERC721, ERC721Enumerable)
+        whenNotPaused
+    {
+        // Si ce n'est pas un mint (from != 0), alors mettre à jour les mappings
+        if (from != address(0)) {
+            _hasLoyaltyCard[from] = false;
+        }
+        
+        if (to != address(0)) {
+            // S'assurer que le destinataire n'a pas déjà une carte
+            require(!_hasLoyaltyCard[to], "Recipient already has a loyalty card");
+            _hasLoyaltyCard[to] = true;
+        }
+        
+        super._beforeTokenTransfer(from, to, tokenId, batchSize);
+    }
+    
+    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
+        address owner = ownerOf(tokenId);
+        _hasLoyaltyCard[owner] = false;
+        
+        super._burn(tokenId);
+    }
+    
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override(ERC721, ERC721URIStorage)
+        returns (string memory)
+    {
+        return super.tokenURI(tokenId);
+    }
+    
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721, ERC721Enumerable, AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
+}
