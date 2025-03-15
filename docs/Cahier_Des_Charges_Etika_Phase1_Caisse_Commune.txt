@@ -1,0 +1,49 @@
+📌 **CAHIER DES CHARGES - PLATEFORME NUMÉRIQUE ÉTIKA (PHASE 1 - MISE À JOUR CAISSE COMMUNE)**  
+
+🔹 **Contexte :**  
+Ce document structure la **Phase 1 du projet** et précise **la gestion de la Caisse Commune** selon l’avancement du projet.  
+L’objectif est de garantir une **transparence totale sur les fonds collectés** et d’assurer **une répartition claire en fonction des phases du projet**.  
+
+---
+
+## **1️⃣ Gestion de la Caisse Commune selon la Phase 1 et la Phase 2**  
+
+📌 **La Caisse Commune est alimentée par les contributions des lauréats des enchères.**  
+
+### **🔹 Phase 1 : Redistribution 100% aux Consommateurs + Rémunération de la Plateforme**  
+✅ **100% des contributions sont redistribuées aux consommateurs** sous forme d’épargne crypto.  
+✅ **Un pourcentage prélevé pour la rémunération de la plateforme** (frais techniques et opérationnels).  
+✅ **Aucun financement de projet éthique ou solidaire à ce stade.**  
+✅ **Transparence totale avec un tableau de bord public des entrées et sorties de fonds.**  
+
+📌 **👉 En Phase 1, l’objectif est de motiver les consommateurs et de prouver la viabilité du système.**  
+
+### **🔹 Phase 2 : Début du Financement de Projets Éthiques et Solidaires**  
+✅ **Une partie des fonds sera allouée aux consommateurs** mais avec un nouveau modèle de répartition.  
+✅ **Introduction d’un système de financement de projets éthiques et solidaires.**  
+✅ **Création d’un fonds d’investissement consommateur pour soutenir des initiatives alignées avec la vision d’Étika.**  
+✅ **Gouvernance participative pour que les utilisateurs puissent voter sur l’allocation des fonds.**  
+
+📌 **👉 Le passage à la Phase 2 dépendra du succès de la Phase 1 et de l’adhésion des utilisateurs.**  
+
+---
+
+## **2️⃣ Mécanismes de Transparence et Sécurité de la Caisse Commune**  
+
+✅ **Toutes les transactions enregistrées on-chain** et accessibles via un tableau de bord public.  
+✅ **Suivi des contributions des industriels en temps réel.**  
+✅ **Audit externe ou smart contract multi-signatures pour garantir l’intégrité des fonds.**  
+✅ **Validation automatique des paiements avant confirmation d’une enchère remportée.**  
+
+📌 **Ces éléments garantissent que la Caisse Commune est utilisée conformément aux règles établies.**  
+
+---
+
+## **3️⃣ Prochaine Étape et Suivi**  
+📌 **Finaliser la gestion des transactions et de la transparence de la Caisse Commune.**  
+📌 **Valider les pourcentages exacts de redistribution et rémunération de la plateforme.**  
+📌 **Intégrer ces règles dans les smart contracts des enchères et du NFT Passeport.**  
+
+📌 **👉 Claude, peux-tu ajuster les smart contracts et la gestion des flux financiers pour respecter ces règles ?**  
+
+Merci d’avance pour ton retour et tes suggestions ! 🚀🔥  

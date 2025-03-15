@@ -1,0 +1,59 @@
+📌 **NOTE POUR CLAUDE – Ajustement pour la Conception de la Plateforme Numérique Étika**  
+
+🔹 **Contexte :**  
+Nous sommes encore dans la phase de **conception**, et avant de penser à des tests en conditions réelles, nous devons **avoir une plateforme tangible et fonctionnelle**.  
+L’objectif est de créer un **environnement testable** qui permettra de montrer clairement **la mécanique du projet** et motiver les premiers utilisateurs convaincus.  
+
+---
+
+## **1️⃣ Priorité Actuelle : Construire une Plateforme Tangible**  
+
+📌 **Avant de chercher des utilisateurs ou de tester des enchères, nous avons besoin de :**  
+✅ **Une première interface web** où l'on peut voir et interagir avec les enchères et NFT.  
+✅ **Un système qui gère les inscriptions et attribue les NFT passeport.**  
+✅ **Une structure technique claire du backend et frontend.**  
+
+---
+
+## **2️⃣ Étapes à Prioriser Maintenant**  
+
+### **🔹 1. Définir l’Architecture et le Cahier des Charges de la Plateforme**  
+✅ **Déterminer la structure** (backend, frontend, blockchain utilisée).  
+✅ **Choisir les technologies** (React, Substrate, Solidity, IPFS, etc.).  
+✅ **Décrire les interactions entre les différents composants (enchères, NFT, PoP, utilisateurs).**  
+
+### **🔹 2. Développer un Prototype Minimal Viable (MVP)**  
+✅ **Créer une version simplifiée de la plateforme avec :**  
+   - **Une interface web** affichant les enchères et NFT.  
+   - **Un smart contract testnet** pour gérer les NFT passeport.  
+   - **Un système d’inscription permettant aux utilisateurs de tester le système.**  
+
+### **🔹 3. Préparer une Présentation Visuelle pour Convaincre un Premier Noyau d’Utilisateurs**  
+✅ **Développer une maquette ou une démo fonctionnelle** à montrer aux premiers testeurs et partenaires.  
+✅ **Créer un pitch clair et structuré** expliquant la mécanique des enchères et du NFT passeport.  
+
+---
+
+## **3️⃣ Améliorations Techniques à Intégrer**  
+
+### 🔹 **1. Résilience des Transactions de Mint**  
+✅ **Ajouter un mécanisme de remint automatique** si une transaction échoue pour éviter la perte du NFT.  
+
+### 🔹 **2. Protection contre les Mises à Jour Simultanées**  
+✅ **Mettre en place une file d’attente** pour éviter que plusieurs enchères ne mettent à jour un NFT en même temps.  
+
+### 🔹 **3. Renforcement des Restrictions de Transfert**  
+✅ **Désactiver complètement les approbations de transfert (`approve`, `setApprovalForAll`).**  
+
+### 🔹 **4. Optimisation des Mises à Jour sous Charge**  
+✅ **Utiliser un batch processing** pour les mises à jour NFT en masse.  
+✅ **Optimiser l’accès aux métadonnées** via un cache serveur pour éviter des requêtes blockchain répétées.  
+
+---
+
+## **📌 Demande à Claude**  
+📌 **Peux-tu nous proposer une architecture claire et optimisée pour cette phase de conception ?**  
+📌 **Quel serait le meilleur choix technologique pour la gestion des enchères et NFT dans cette phase initiale ?**  
+📌 **Comment structurer efficacement un MVP permettant de démontrer rapidement la valeur du projet ?**  
+
+Merci d’avance pour ton retour et tes suggestions ! 🚀🔥  

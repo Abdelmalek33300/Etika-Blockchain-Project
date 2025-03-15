@@ -1,0 +1,96 @@
+📌 **CAHIER DES CHARGES - PLATEFORME NUMÉRIQUE ÉTIKA (VERSION COMPLÈTE AVEC TRANSITION PHASE 2)**  
+
+🔹 **Contexte :**  
+Ce document est notre **fil conducteur** pour structurer le développement du projet Étika.  
+Il intègre **les mises à jour concernant la gestion de la Caisse Commune, la transparence des enchères, l’application mobile et la transition vers la Phase 2.**  
+L’objectif est d’assurer une **continuité et une transmission fluide des connaissances**.  
+
+📌 **Ce document est évolutif et sera mis à jour régulièrement pour intégrer les décisions et les améliorations du projet.**  
+
+---
+
+## **1️⃣ Priorité Actuelle : Finaliser et Optimiser la Plateforme (Phase 1)**  
+
+📌 **Les objectifs de cette phase sont :**  
+✅ **Finaliser l’architecture et la sécurisation des enchères et du NFT Passeport.**  
+✅ **Développer une première version fonctionnelle de la plateforme web et mobile.**  
+✅ **Définir l’interface utilisateur (UI/UX) et rendre l’expérience fluide et intuitive.**  
+✅ **Mettre en place un système sans friction où l’utilisateur ne se rend pas compte qu’il utilise la blockchain.**  
+✅ **Préparer la transition vers la Phase 2 en proposant une option d’épargne aux consommateurs.**  
+
+---
+
+## **2️⃣ Nouvelle Transition Phase 1 → Phase 2 : Option d'Épargne pour les Consommateurs**  
+
+📌 **Objectif : Laisser les consommateurs décider s’ils veulent débloquer leurs avoirs immédiatement ou les convertir en épargne Phase 2.**  
+
+### ✅ **1️⃣ Proposition après la clôture des enchères**  
+🔹 À la fin de chaque enchère, chaque utilisateur reçoit un **rapport personnalisé** indiquant :  
+   - Le montant d’avoirs obtenus.  
+   - Une estimation des gains potentiels en Phase 2.  
+   - Une option claire : **"Voulez-vous débloquer vos avoirs maintenant ou les convertir en épargne Phase 2 ?"**  
+
+📌 **👉 Cela permet un choix volontaire et évite tout sentiment de contrainte.**  
+
+### ✅ **2️⃣ Une transition vers la Phase 2 basée sur la confiance**  
+🔹 La **Phase 2 ne s’active que si un pourcentage minimum d’utilisateurs choisit l’épargne.**  
+🔹 Seuil recommandé : **Si 70% des fonds restent bloqués en épargne, la Phase 2 est validée.**  
+🔹 Cela crée un **vote indirect par engagement**, garantissant une transition naturelle.  
+
+### ✅ **3️⃣ Accès partiel aux fonds pour éviter la peur du blocage**  
+🔹 Plutôt que **tout bloquer immédiatement**, une répartition est proposée :  
+   - **50% des avoirs accessibles immédiatement.**  
+   - **50% convertis en épargne Phase 2 si l’utilisateur choisit cette option.**  
+
+📌 **👉 Cette solution équilibre flexibilité et engagement.**  
+
+---
+
+## **3️⃣ Gestion de la Caisse Commune : Transparence et Sécurité**  
+
+📌 **La Caisse Commune est alimentée par les contributions des lauréats des enchères.**  
+
+### **🔹 Phase 1 : Redistribution 100% aux Consommateurs + Rémunération de la Plateforme**  
+✅ **100% des contributions sont redistribuées aux consommateurs** sous forme d’avoirs numériques.  
+✅ **Un pourcentage est prélevé pour la rémunération de la plateforme** (frais techniques et opérationnels).  
+✅ **Aucun financement de projet éthique ou solidaire à ce stade.**  
+✅ **Transparence totale avec un tableau de bord public des entrées et sorties de fonds.**  
+
+### **🔹 Phase 2 : Début du Financement de Projets Éthiques et Solidaires**  
+✅ **Une partie des fonds sera allouée aux consommateurs** mais avec un modèle de répartition hybride.  
+✅ **Introduction d’un système de financement de projets éthiques et solidaires.**  
+✅ **Gouvernance participative : les utilisateurs pourront voter sur l’allocation des fonds.**  
+
+📌 **👉 La Phase 2 ne s’active que si un nombre suffisant de consommateurs choisit l’épargne.**  
+
+---
+
+## **4️⃣ Sécurisation des Enchères et Prévention de la Fraude**  
+
+### 🔹 **1. Protection contre les Fraudes des Industriels**  
+✅ **Toutes les enchères se déroulent via l’interface officielle** → Aucune manipulation externe possible.  
+✅ **Vérification automatique des fonds avant chaque mise** → Évite les offres fantômes.  
+✅ **Les fonds sont bloqués immédiatement après une mise** → Impossible de se rétracter.  
+
+### 🔹 **2. Détection et Prévention des Tentatives de Manipulation**  
+✅ **Blocage des industriels qui essaient de manipuler les prix** (collusion).  
+✅ **Filtrage automatique des offres trop basses ou répétées (anti-spam).**  
+✅ **Analyse des comportements suspects pour détecter des schémas de fraude.**  
+
+### 🔹 **3. Protection Contre les Enchères Malveillantes**  
+✅ **Interdiction des offres ridiculement basses pour ralentir le système (spam).**  
+✅ **Mécanisme de pénalisation pour les entreprises qui abusent du système.**  
+
+📌 **Ces protections garantissent une enchère 100% transparente et sécurisée.**  
+
+---
+
+## **5️⃣ Prochaine Étape et Suivi**  
+📌 **Finaliser l’architecture et le développement de la plateforme web.**  
+📌 **Valider la mécanique de transition Phase 1 → Phase 2 avec un test utilisateur.**  
+📌 **Intégrer ces règles dans les smart contracts des enchères et du NFT Passeport.**  
+📌 **Préparer les premiers tests sur testnet après validation de la plateforme.**  
+
+📌 **👉 Claude, peux-tu ajuster l’implémentation des smart contracts pour intégrer cette option de transition Phase 1 → Phase 2 ?**  
+
+Merci d’avance pour ton retour et tes suggestions ! 🚀🔥  

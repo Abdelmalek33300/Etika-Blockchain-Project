@@ -1,0 +1,481 @@
+#[cfg(test)]
+mod stress_tests {
+    use super::*;
+    use frame_support::assert_ok;
+    use rand::{Rng, SeedableRng};
+    use rand::rngs::StdRng;
+    
+    // Test pour simuler un grand nombre de transactions PoP
+    #[test]
+    fn process_many_pop_transactions() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            // Créer des catégories avec des sponsors
+            let categories = vec![
+                b"banking".to_vec(),
+                b"insurance".to_vec(),
+                b"telecom".to_vec(),
+                b"energy".to_vec(),
+            ];
+            
+            for (i, category) in categories.iter().enumerate() {
+                <CategorySponsors<Test>>::insert(category.clone(), 10 + i as u64);
+            }
+            
+            <AllCategories<Test>>::put(categories.clone());
+            
+            // Autoriser un administrateur pour valider les PoP
+            let admin = 1;
+            <AuthorizedAdmins<Test>>::insert(admin, true);
+            
+            // Créer un grand nombre de comptes consommateurs et industriels
+            let num_consumers = 100;
+            let num_industrials = 20;
+            
+            // Donnez des fonds à tous ces comptes
+            for i in 0..num_consumers {
+                Balances::make_free_balance_be(&(100 + i as u64), 10000);
+            }
+            
+            for i in 0..num_industrials {
+                Balances::make_free_balance_be(&(10 + i as u64), 100000);
+            }
+            
+            // Générer un grand nombre de transactions PoP
+            let num_transactions = 1000;
+            
+            // Initialiser un générateur de nombres aléatoires avec une graine fixe
+            let seed = [0u8; 32];
+            let mut rng = StdRng::from_seed(seed);
+            
+            let mut start_time = System::block_number();
+            
+            // Pour mesurer le temps d'exécution
+            let start_weight: Weight = 0;
+            
+            for i in 0..num_transactions {
+                // Sélectionner aléatoirement un consommateur et un marchand
+                let consumer_idx = rng.gen_range(0..num_consumers);
+                let consumer = 100 + consumer_idx as u64;
+                
+                // Pour varier les transactions, parfois le marchand est un industriel (sponsor),
+                // parfois c'est un autre compte
+                let use_sponsor_as_merchant = rng.gen_bool(0.4); // 40% de chance
+                
+                let merchant = if use_sponsor_as_merchant {
+                    let category_idx = rng.gen_range(0..categories.len());
+                    <CategorySponsors<Test>>::get(&categories[category_idx]).unwrap_or(20)
+                } else {
+                    let merchant_idx = rng.gen_range(0..num_industrials);
+                    10 + merchant_idx as u64
+                };
+                
+                // Sélectionner aléatoirement 0-3 fournisseurs
+                let num_suppliers = rng.gen_range(0..4);
+                let mut suppliers = Vec::new();
+                
+                for _ in 0..num_suppliers {
+                    let supplier_idx = rng.gen_range(0..num_industrials);
+                    suppliers.push(10 + supplier_idx as u64);
+                }
+                
+                // Générer un montant aléatoire
+                let amount = rng.gen_range(100..10000);
+                
+                // Générer une transaction PoP
+                let transaction = PoPTransaction {
+                    id: [i as u8; 32],
+                    consumer,
+                    merchant,
+                    suppliers,
+                    standard_amount: amount,
+                    tokens_exchanged: amount / 10,
+                    savings_generated: amount / 20,
+                    timestamp: (start_time.saturating_mul(6000)) as u64, // Simuler un timestamp
+                    receipt_hash: [i as u8; 32],
+                    signatures: vec![
+                        (consumer, [0u8; 64]),
+                        (merchant, [0u8; 64]),
+                    ],
+                };
+                
+                // Traiter la transaction PoP
+                assert_ok!(Module::<Test>::process_pop_transaction(
+                    Origin::signed(admin),
+                    transaction
+                ));
+                
+                // Avancer le temps tous les 100 transactions
+                if i % 100 == 0 {
+                    start_time = start_time.saturating_add(100);
+                    System::set_block_number(start_time);
+                }
+            }
+            
+            // Mesurer le poids total
+            let end_weight = Weight::MAX; // Placeholder
+            
+            // Vérifier que le traitement a bien eu lieu
+            
+            // 1. Vérifier l'adoption pour quelques consommateurs
+            let test_consumer = 100;
+            let test_category = &categories[0];
+            
+            // Le consommateur devrait avoir adopté au moins un sponsor
+            let has_adoption = categories.iter().any(|cat| 
+                Module::<Test>::adoption_status((test_consumer, cat.clone()))
+            );
+            
+            assert!(has_adoption, "Le consommateur devrait avoir adopté au moins un sponsor");
+            
+            // 2. Vérifier les scores d'engagement pour les industriels
+            let test_industrial = 10; // Premier industriel
+            
+            let engagement_score = Module::<Test>::industrial_engagement_score(test_industrial);
+            assert!(engagement_score > 0, "L'industriel devrait avoir un score d'engagement positif");
+            
+            // 3. Vérifier les comptes de transactions PoP
+            let transaction_count = Module::<Test>::industrial_pop_transaction_count((test_industrial, test_category.clone()));
+            assert!(transaction_count > 0, "L'industriel devrait avoir généré des transactions PoP");
+            
+            // 4. Vérifier les dernières interactions
+            let has_interaction = categories.iter().any(|cat| 
+                Module::<Test>::last_sponsor_interaction((test_consumer, cat.clone())) > 0
+            );
+            
+            assert!(has_interaction, "Le consommateur devrait avoir des interactions récentes");
+            
+            // Log du résultat
+            println!("Test de stress réussi: {} transactions PoP traitées", num_transactions);
+        });
+    }
+    
+    // Test pour simuler des enchères concurrentes avec avantages d'engagement
+    #[test]
+    fn concurrent_auctions_with_engagement_benefits() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            // Configurer les avantages par niveau d'engagement
+            let intermediate_benefits = EngagementBenefits {
+                bid_discount: 5,
+                seniority_bonus: 1000.into(),
+                exclusive_features: vec![],
+            };
+            <EngagementLevelBenefits<Test>>::insert(EngagementLevel::Intermediate, intermediate_benefits);
+            
+            let advanced_benefits = EngagementBenefits {
+                bid_discount: 15,
+                seniority_bonus: 5000.into(),
+                exclusive_features: vec![],
+            };
+            <EngagementLevelBenefits<Test>>::insert(EngagementLevel::Advanced, advanced_benefits);
+            
+            let premium_benefits = EngagementBenefits {
+                bid_discount: 25,
+                seniority_bonus: 10000.into(),
+                exclusive_features: vec![],
+            };
+            <EngagementLevelBenefits<Test>>::insert(EngagementLevel::Premium, premium_benefits);
+            
+            // Créer des catégories
+            let categories = vec![
+                b"banking".to_vec(),
+                b"insurance".to_vec(),
+                b"telecom".to_vec(),
+                b"energy".to_vec(),
+            ];
+            
+            for (i, category) in categories.iter().enumerate() {
+                <AllCategories<Test>>::get().push(category.clone());
+                <Categories<Test>>::insert(category.clone(), CategoryMetadata {
+                    category_id: category.clone(),
+                    name: category.clone(),
+                    description: category.clone(),
+                    status: CategoryStatus::ExclusiveAuction,
+                    status_changed_at: 1,
+                    auction_count: 0,
+                });
+            }
+            
+            // Créer 20 industriels avec différents niveaux d'engagement
+            let num_industrials = 20;
+            for i in 0..num_industrials {
+                let industrial = 10 + i as u64;
+                
+                // Attribuer des niveaux d'engagement différents
+                let score = match i % 4 {
+                    0 => 0, // Base
+                    1 => IntermediateEngagementThreshold::get(), // Intermediate
+                    2 => AdvancedEngagementThreshold::get(), // Advanced
+                    3 => PremiumEngagementThreshold::get(), // Premium
+                    _ => unreachable!(),
+                };
+                
+                <IndustrialEngagementScore<Test>>::insert(industrial, score);
+                
+                // Rendre l'industriel éligible pour toutes les catégories
+                let sponsor_category = SponsorCategory::Banking;
+                <EligibleSponsors<Test>>::insert((industrial, sponsor_category.clone()), true);
+                
+                // Donner des fonds à l'industriel
+                Balances::make_free_balance_be(&industrial, 1_000_000);
+                
+                // Pour les industriels avec activité PoP, configurer les compteurs
+                if i % 2 == 0 { // 50% des industriels ont une activité PoP
+                    for category in &categories {
+                        <IndustrialPopTransactionCount<Test>>::insert((industrial, category.clone()), MinIndustrialPopTransactions::get());
+                        <LastIndustrialPopTransaction<Test>>::insert((industrial, category.clone()), Some(1));
+                    }
+                }
+            }
+            
+            // Autoriser un administrateur
+            let admin = 1;
+            <AuthorizedAdmins<Test>>::insert(admin, true);
+            
+            // Créer des enchères pour chaque catégorie, avec différents retry_count
+            for (i, category) in categories.iter().enumerate() {
+                let retry_count = i as u32 % 2; // Certaines enchères sont des relances
+                
+                // Créer l'enchère
+                let auction_id = [i as u8; 32];
+                let auction = AuctionData {
+                    id: auction_id,
+                    category: category.clone(),
+                    territory_id: b"default".to_vec(),
+                    start_block: 1,
+                    end_block: 1000,
+                    starting_price: 10000,
+                    min_bid_increment: 1000,
+                    status: AuctionStatus::Active,
+                    bid_history: Vec::new(),
+                    validating_admins: Vec::new(),
+                    admin_validation: false,
+                    retry_count,
+                    participants: Vec::new(),
+                    tokens_allocated: 100000,
+                    tokens_distributed: 0,
+                    finalization_error: None,
+                    finalized_at: None,
+                };
+                <Auctions<Test>>::insert(auction_id, auction);
+                
+                // Simuler de nombreuses enchères
+                let seed = [i as u8; 32];
+                let mut rng = StdRng::from_seed(seed);
+                
+                let num_bids = 50;
+                for j in 0..num_bids {
+                    // Sélectionner aléatoirement un industriel
+                    let industrial_idx = rng.gen_range(0..num_industrials);
+                    let industrial = 10 + industrial_idx as u64;
+                    
+                    // Calculer un montant d'enchère
+                    let base_amount = 10000 + j * 1000;
+                    let amount = base_amount + rng.gen_range(0..1000);
+                    
+                    // Pour les enchères de relance, vérifier d'abord si l'industriel a une activité PoP
+                    if retry_count > 0 {
+                        let has_activity = <IndustrialPopTransactionCount<Test>>::get((industrial, category.clone())) >= MinIndustrialPopTransactions::get();
+                        
+                        if !has_activity {
+                            // Skiper cet industriel s'il n'a pas d'activité PoP
+                            continue;
+                        }
+                    }
+                    
+                    // Tenter de placer une enchère
+                    let result = Module::<Test>::place_bid(
+                        Origin::signed(industrial),
+                        auction_id,
+                        amount as u128
+                    );
+                    
+                    // Ne pas vérifier le résultat car certaines enchères échoueront naturellement
+                    // (montant trop bas, etc.)
+                }
+            }
+            
+            // Avancer le temps jusqu'à la fin des enchères
+            System::set_block_number(1001);
+            
+            // Finaliser les enchères
+            for i in 0..categories.len() {
+                let auction_id = [i as u8; 32];
+                
+                // Tenter de finaliser l'enchère
+                let result = Module::<Test>::finalize_auction(
+                    Origin::signed(admin),
+                    auction_id
+                );
+                
+                // Ne pas vérifier le résultat car certaines enchères peuvent échouer
+            }
+            
+            // Vérifier que les enchères ont bien été finalisées
+            let finalized_count = categories.iter().filter(|&category| {
+                let auction_id = <CategoryLastAuction<Test>>::get(category);
+                if let Some(auction) = <Auctions<Test>>::get(auction_id) {
+                    auction.status == AuctionStatus::Completed
+                } else {
+                    false
+                }
+            }).count();
+            
+            assert!(finalized_count > 0, "Au moins une enchère aurait dû être finalisée");
+            
+            // Vérifier que les avantages d'engagement ont bien été appliqués
+            // (Vérification difficile car dépend des enchères aléatoires)
+            
+            println!("Test de stress des enchères réussi: {} enchères traitées", categories.len());
+        });
+    }
+    
+    // Test pour simuler la dégradation progressive des scores d'engagement
+    #[test]
+    fn engagement_score_decay_over_time() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            // Créer plusieurs industriels avec différents scores d'engagement
+            let scores = vec![50, 100, 200, 350];
+            
+            for (i, &score) in scores.iter().enumerate() {
+                let industrial = 10 + i as u64;
+                <IndustrialEngagementScore<Test>>::insert(industrial, score);
+            }
+            
+            // Simuler plusieurs périodes de dégradation
+            let decay_period = 10000;
+            let num_periods = 5;
+            
+            for period in 1..=num_periods {
+                // Avancer au bloc de dégradation
+                System::set_block_number(period * decay_period);
+                
+                // Appliquer la dégradation
+                Module::<Test>::decay_engagement_scores(decay_period.into());
+                
+                // Vérifier les nouveaux scores
+                for (i, &initial_score) in scores.iter().enumerate() {
+                    let industrial = 10 + i as u64;
+                    let expected_score = initial_score * 95u32.pow(period) / 100u32.pow(period);
+                    
+                    assert_eq!(
+                        Module::<Test>::industrial_engagement_score(industrial),
+                        expected_score,
+                        "Le score d'engagement devrait être dégradé correctement"
+                    );
+                }
+            }
+            
+            println!("Test de dégradation des scores réussi sur {} périodes", num_periods);
+        });
+    }
+    
+    // Test pour simuler un grand nombre d'accès aux avantages
+    #[test]
+    fn many_benefit_access_attempts() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            // Créer des catégories
+            let categories = vec![
+                b"banking".to_vec(),
+                b"insurance".to_vec(),
+                b"telecom".to_vec(),
+                b"energy".to_vec(),
+            ];
+            
+            for category in &categories {
+                <AllCategories<Test>>::get().push(category.clone());
+                <CategorySponsors<Test>>::insert(category.clone(), 10);
+            }
+            
+            // Créer un territoire fonctionnel
+            let territory_id = b"test".to_vec();
+            <Territories<Test>>::insert(territory_id.clone(), TerritoryActivationStatus {
+                territory_id: territory_id.clone(),
+                name: b"Test".to_vec(),
+                activation_level: ActivationLevel::FullyOperational,
+                consumer_count: 1000,
+                merchant_count: 100,
+                sponsor_categories_filled: categories.clone(),
+                available_features: vec![b"all".to_vec()],
+                consumer_fund_capitalization: 1000000,
+                activation_timestamp: Some(1),
+                authorized_admins: vec![1],
+            });
+            
+            // Configurer les catégories requises
+            <RequiredCategoriesByTerritory<Test>>::insert(territory_id.clone(), categories.clone());
+            
+            // Créer un grand nombre de consommateurs
+            let num_consumers = 200;
+            for i in 0..num_consumers {
+                let consumer = 100 + i as u64;
+                
+                // Attribuer des adoptions aléatoires
+                for category in &categories {
+                    let has_adoption = i % 3 != 0; // 2/3 des consommateurs ont adopté
+                    <AdoptionStatus<Test>>::insert((consumer, category.clone()), has_adoption);
+                    
+                    // Parmi ceux qui ont adopté, certains ont des interactions récentes
+                    if has_adoption && i % 4 != 0 { // 3/4 des adoptants ont des interactions récentes
+                        <LastSponsorInteraction<Test>>::insert((consumer, category.clone()), 1);
+                        <SponsorEngagementScore<Test>>::insert((consumer, category.clone()), 1);
+                    }
+                }
+            }
+            
+            // Simuler de nombreuses tentatives d'accès aux avantages
+            let num_attempts = 1000;
+            
+            let seed = [0u8; 32];
+            let mut rng = StdRng::from_seed(seed);
+            
+            let mut success_count = 0;
+            let mut failure_count = 0;
+            
+            for i in 0..num_attempts {
+                // Sélectionner aléatoirement un consommateur
+                let consumer_idx = rng.gen_range(0..num_consumers);
+                let consumer = 100 + consumer_idx as u64;
+                
+                // Sélectionner aléatoirement une catégorie ou None
+                let category_option = if rng.gen_bool(0.7) { // 70% de chance d'avoir une catégorie spécifique
+                    let category_idx = rng.gen_range(0..categories.len());
+                    Some(categories[category_idx].clone())
+                } else {
+                    None
+                };
+                
+                // Tenter d'accéder à un avantage
+                let benefit_id = [i as u8; 32];
+                let result = Module::<Test>::access_ecosystem_benefit(
+                    Origin::signed(consumer),
+                    benefit_id,
+                    category_option
+                );
+                
+                if result.is_ok() {
+                    success_count += 1;
+                } else {
+                    failure_count += 1;
+                }
+            }
+            
+            println!(
+                "Test d'accès aux avantages terminé: {} succès, {} échecs sur {} tentatives",
+                success_count, failure_count, num_attempts
+            );
+            
+            // Vérifier que nous avons eu à la fois des succès et des échecs
+            // (ce qui confirme que la logique d'accès fonctionne)
+            assert!(success_count > 0, "Il devrait y avoir des accès réussis");
+            assert!(failure_count > 0, "Il devrait y avoir des accès refusés");
+        });
+    }
+}

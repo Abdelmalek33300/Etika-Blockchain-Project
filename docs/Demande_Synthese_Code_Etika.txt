@@ -1,0 +1,32 @@
+📌 **DEMANDE À CLAUDE – Synthèse du Code Actuel pour la Phase 1**  
+
+🔹 **Contexte :**  
+Nous avons structuré la **Phase 1** du projet Étika, et nous souhaitons savoir **exactement où nous en sommes** avant de continuer le développement.  
+L’objectif est d’avoir une vision claire des éléments déjà codés pour éviter de repartir de zéro et optimiser ce qui est en place.  
+
+---
+
+## **1️⃣ Demande de Synthèse du Code Actuel**  
+
+📌 **Claude, peux-tu nous fournir une synthèse du code déjà développé ?**  
+✅ **Plateforme Web :** Quels sont les modules fonctionnels actuellement ?  
+✅ **Application Mobile :** Où en est le développement ? Y a-t-il un prototype en place ?  
+✅ **Smart Contracts :** Quels contrats sont prêts et sur quels testnets ont-ils été déployés ?  
+✅ **Backend & API :** Quels services backend sont opérationnels ?  
+✅ **Tests effectués :** Quels tests ont déjà été réalisés et quels sont les résultats ?  
+
+📌 **L’objectif est d’avoir une vue d’ensemble pour aligner le développement avec notre feuille de route Phase 1.**  
+
+---
+
+## **2️⃣ Suivi et Plan d’Action**  
+
+📌 **Une fois cette synthèse obtenue, nous pourrons :**  
+✅ Définir les **améliorations nécessaires** avant de finaliser la plateforme.  
+✅ Identifier les **éléments manquants** à développer.  
+✅ Lancer la **conception UI/UX** avant l’implémentation graphique.  
+✅ Planifier les **premiers tests sur testnet une fois la plateforme prête**.  
+
+📌 **👉 Peux-tu nous préparer cette synthèse et nous donner une estimation des prochaines étapes pour avancer efficacement ?**  
+
+Merci d’avance pour ton retour et ta vision technique ! 🚀🔥  

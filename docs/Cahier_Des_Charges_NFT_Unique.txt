@@ -1,0 +1,74 @@
+📌 **NOTE POUR CLAUDE – Ajustement du NFT de Participation pour les Enchères**  
+
+🔹 **Contexte :**  
+Nous avons décidé d’opter pour un **NFT unique par participant**, au lieu d’un NFT par enchère.  
+Ce NFT servira de **passeport universel** pour toutes les enchères sur la plateforme et devra être **sécurisé, scalable et robuste**.  
+
+---
+
+## **1️⃣ Objectif du NFT Unique par Participant**  
+
+✅ **Chaque participant reçoit un seul NFT lors de sa première inscription.**  
+✅ **Ce NFT permet d’accéder à toutes les enchères et de suivre l’historique des participations.**  
+✅ **Il doit être dynamique et s’adapter à chaque nouvelle enchère ouverte sur la plateforme.**  
+✅ **Il doit garantir un haut niveau de sécurité et éviter les abus.**  
+
+---
+
+## **2️⃣ Fonctionnalités Clés du NFT**  
+
+### **🔹 1. Un seul NFT pour toutes les enchères**  
+- Chaque utilisateur reçoit **un seul NFT à vie** dès qu’il s’inscrit à une enchère.  
+- Ce NFT est stocké **de manière décentralisée (IPFS, Arweave, autre solution sécurisée)**.  
+- Il est utilisé **comme badge de participation et certificat d’engagement.**  
+
+### **🔹 2. Mise à jour dynamique des informations**  
+- À chaque participation, le NFT enregistre les **nouveaux événements** :  
+  - **Incrémentation du compteur de participations.**  
+  - **Ajout du secteur de l’enchère récente dans les métadonnées.**  
+  - **Historique des enchères passées.**  
+- **Toutes ces informations doivent être accessibles on-chain et vérifiables.**  
+
+### **🔹 3. Sécurité et Protection Contre les Abus**  
+- **Signature cryptographique** pour valider que chaque NFT appartient bien à un utilisateur.  
+- **Interdiction des duplications** → Un utilisateur ne peut pas recevoir plusieurs NFT.  
+- **Mécanisme de blacklist en cas de fraude ou d’abus.**  
+- **Possibilité de désactiver temporairement un NFT en cas d’infraction aux règles.**  
+
+---
+
+## **3️⃣ Exemple de Métadonnées du NFT (Données Dynamiques)**  
+
+```json
+{
+  "name": "NFT Étika - Passeport Enchères",
+  "description": "Ce NFT permet de participer à toutes les enchères sur la plateforme Étika.",
+  "image": "https://ipfs.io/ipfs/Qm123...456",
+  "attributes": [
+    { "trait_type": "Participant", "value": "0x12345..." },
+    { "trait_type": "Total Enchères Participées", "value": 8 },
+    { "trait_type": "Dernière Enchère", "value": "Assurance - 2024-03-12" },
+    { "trait_type": "Historique des Enchères", "value": ["Banque", "Téléphonie", "VOD", "Énergie"] }
+  ]
+}
+```  
+
+📌 **Ce NFT évolue avec l’utilisateur et lui permet d’accéder à différents secteurs et avantages.**  
+
+---
+
+## **4️⃣ Scalabilité et Robustesse**  
+
+✅ **Doit pouvoir supporter un grand nombre de participants** → Solution de stockage **scalable et économique**.  
+✅ **Ne doit pas engorger la blockchain** → Utilisation d’un stockage optimisé hors chaîne (IPFS, Arweave) et des signatures on-chain minimales.  
+✅ **Gestion rapide des mises à jour du NFT** → Implémentation efficace pour éviter les ralentissements sur le réseau.  
+✅ **Système de récupération sécurisé** en cas de perte de l’accès au NFT.  
+
+---
+
+## **5️⃣ Prochaines Étapes**  
+📌 **Peux-tu nous proposer une implémentation pour gérer ce NFT universel avec ces fonctionnalités ?**  
+📌 **Quels sont les meilleurs choix techniques selon toi pour optimiser le stockage et la scalabilité ?**  
+📌 **Y a-t-il déjà un mécanisme que nous avons mal interprété et qui couvre une partie de ces besoins ?**  
+
+Merci d’avance pour ton retour et tes suggestions ! 🚀🔥  

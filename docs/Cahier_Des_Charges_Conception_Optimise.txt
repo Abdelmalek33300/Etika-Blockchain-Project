@@ -1,0 +1,67 @@
+📌 **NOTE POUR CLAUDE – Ajustement pour la Conception de la Plateforme Numérique Étika**  
+
+🔹 **Contexte :**  
+Nous sommes encore dans la phase de **conception**, et avant de penser à des tests en conditions réelles, nous devons **avoir une plateforme tangible et fonctionnelle**.  
+L’objectif est de créer un **environnement testable** qui permettra de montrer clairement **la mécanique du projet** et motiver les premiers utilisateurs convaincus.  
+
+---
+
+## **1️⃣ Priorité Actuelle : Construire une Plateforme Tangible**  
+
+📌 **Avant de chercher des utilisateurs ou de tester des enchères, nous avons besoin de :**  
+✅ **Une première interface web** où l'on peut voir et interagir avec les enchères et NFT.  
+✅ **Un système qui gère les inscriptions et attribue les NFT passeport.**  
+✅ **Une structure technique claire du backend et frontend.**  
+
+---
+
+## **2️⃣ Étapes à Prioriser Maintenant**  
+
+### **🔹 1. Définir l’Architecture et le Cahier des Charges de la Plateforme**  
+✅ **Déterminer la structure** (backend, frontend, blockchain utilisée).  
+✅ **Choisir les technologies** (React, Substrate, Solidity, IPFS, etc.).  
+✅ **Décrire les interactions entre les différents composants (enchères, NFT, PoP, utilisateurs).**  
+
+### **🔹 2. Développer un Prototype Minimal Viable (MVP)**  
+✅ **Créer une version simplifiée de la plateforme avec :**  
+   - **Une interface web** affichant les enchères et NFT.  
+   - **Un smart contract testnet** pour gérer les NFT passeport.  
+   - **Un système d’inscription permettant aux utilisateurs de tester le système.**  
+
+### **🔹 3. Préparer une Présentation Visuelle pour Convaincre un Premier Noyau d’Utilisateurs**  
+✅ **Développer une maquette ou une démo fonctionnelle** à montrer aux premiers testeurs et partenaires.  
+✅ **Créer un pitch clair et structuré** expliquant la mécanique des enchères et du NFT passeport.  
+
+---
+
+## **3️⃣ Améliorations Techniques à Intégrer (Selon les Derniers Tests de Claude)**  
+
+### 🔹 **1. Résilience des Transactions de Mint des NFT**  
+✅ **Problème détecté** → Si une transaction de mint échoue (problème réseau), l’utilisateur peut ne pas recevoir son NFT.  
+🔹 **Solution** → Ajouter un **mécanisme de remint automatique** après un délai si l’opération échoue.  
+
+### 🔹 **2. Protection contre les Mises à Jour Simultanées des NFT**  
+✅ **Problème détecté** → Si plusieurs utilisateurs participent à des enchères en même temps, les mises à jour de leurs NFT peuvent entrer en conflit.  
+🔹 **Solution** → Mettre en place une **file d’attente pour les mises à jour** ou un **verrouillage temporaire des données NFT**.  
+
+### 🔹 **3. Sécurité et Protection Contre les Fraudes**  
+✅ **Problème détecté** → Actuellement, il est possible d’approuver le transfert du NFT (`approve + transferFrom`), ce qui peut poser un problème de sécurité.  
+🔹 **Solution** → **Désactiver complètement les approbations de transfert** (`approve`, `setApprovalForAll`).  
+
+### 🔹 **4. Optimisation des Performances et Scalabilité**  
+✅ **Problème détecté** → Lorsqu’un grand nombre d’utilisateurs mint un NFT ou participe simultanément à une enchère, le réseau peut ralentir.  
+🔹 **Solution** → **Utiliser un batch processing** pour optimiser la création et mise à jour des NFT.  
+🔹 **Mettre en place un cache** pour éviter d’interroger la blockchain à chaque enchère.  
+
+### 🔹 **5. Intégration avec le Système d’Enchères**  
+✅ **Problème détecté** → Vérification du NFT trop lente, ce qui ralentit le processus d’enchère.  
+🔹 **Solution** → Optimiser la requête **en utilisant une vérification en cache** au lieu d’une requête directe sur la blockchain.  
+
+---
+
+## **📌 Demande à Claude**  
+📌 **Peux-tu nous proposer une architecture claire et optimisée pour cette phase de conception ?**  
+📌 **Comment intégrer ces corrections et garantir un système résilient et évolutif ?**  
+📌 **Quelle blockchain testnet recommandes-tu pour optimiser les performances et la sécurité ?**  
+
+Merci d’avance pour ton retour et tes suggestions ! 🚀🔥  

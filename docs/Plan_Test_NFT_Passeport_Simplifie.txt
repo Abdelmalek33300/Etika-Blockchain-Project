@@ -1,0 +1,56 @@
+📌 **PLAN DE TEST POUR CLAUDE – Vérification du NFT Passeport Étika**  
+
+🔹 **Objectif :**  
+Nous voulons vérifier que le **NFT passeport fonctionne bien** et qu’il s’adapte correctement à toutes les enchères sur la plateforme.  
+Le NFT passeport est un **badge numérique unique** donné à chaque utilisateur lors de sa première enchère. Il sert d’**accès universel** aux enchères et garde l’historique des participations.  
+
+---
+
+## **1️⃣ Création du NFT**  
+✅ **Quand un utilisateur rejoint sa première enchère, reçoit-il bien un NFT unique ?**  
+✅ **Peut-il en recevoir plusieurs (ce qui ne doit pas être possible) ?**  
+
+💡 **But : Chaque utilisateur doit recevoir un seul NFT et pas plus.**  
+
+---
+
+## **2️⃣ Mise à Jour du NFT après chaque Enchère**  
+✅ **Si un utilisateur participe à une nouvelle enchère, le NFT met-il bien à jour son historique ?**  
+✅ **L’historique des enchères précédentes est-il bien conservé ?**  
+
+💡 **But : Vérifier que le NFT évolue et garde en mémoire toutes les enchères passées.**  
+
+---
+
+## **3️⃣ Vérification des Règles de Sécurité**  
+✅ **Peut-on transférer un NFT à un autre utilisateur ? (Normalement, non.)**  
+✅ **Un utilisateur bloqué peut-il encore utiliser son NFT ? (Normalement, non.)**  
+✅ **Si quelqu’un essaie de tricher en modifiant son NFT, est-ce détecté et refusé ?**  
+
+💡 **But : Empêcher les fraudes et sécuriser les enchères.**  
+
+---
+
+## **4️⃣ Tester avec Beaucoup d’Utilisateurs en Même Temps**  
+✅ **Que se passe-t-il si 1000 utilisateurs reçoivent un NFT simultanément ?**  
+✅ **Que se passe-t-il si tous enchérissent en même temps ?**  
+✅ **Est-ce que la blockchain tient le coup sans ralentir ni coûter trop cher ?**  
+
+💡 **But : Vérifier que le système est stable et efficace.**  
+
+---
+
+## **5️⃣ Vérifier l’Intégration avec les Enchères**  
+✅ **Un utilisateur peut-il enchérir sans NFT ? (Normalement, non.)**  
+✅ **Après une enchère réussie, le NFT se met-il bien à jour avec la nouvelle participation ?**  
+
+💡 **But : S’assurer que le NFT est bien lié aux enchères et fonctionne correctement.**  
+
+---
+
+## **📌 Demande à Claude**  
+📌 **Peux-tu réaliser cette simulation et nous faire un retour sur les performances et éventuels problèmes ?**  
+📌 **Si quelque chose ne fonctionne pas bien, quelles améliorations proposes-tu ?**  
+📌 **Quelle blockchain testnet serait la plus adaptée pour ce test ?**  
+
+Merci d’avance pour ton retour et tes suggestions ! 🚀🔥  

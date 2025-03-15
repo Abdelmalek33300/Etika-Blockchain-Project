@@ -1,0 +1,95 @@
+📌 **CAHIER DES CHARGES - PLATEFORME NUMÉRIQUE ÉTIKA (PHASE 1 - CONCEPTION & SÉCURISATION)**  
+
+🔹 **Contexte :**  
+Nous entrons dans la **Phase 1 du projet**, qui consiste à **finaliser l’architecture, sécuriser le système et commencer le développement de la plateforme numérique**.  
+L’objectif est de créer **une base solide avant d’envisager des simulations sur testnet.**  
+
+---
+
+## **1️⃣ Priorité Actuelle : Construire la Plateforme Étika**  
+
+📌 **Les objectifs de cette phase sont :**  
+✅ **Finaliser l’architecture et sécuriser les enchères et les NFT Passeport.**  
+✅ **Développer une première version fonctionnelle de la plateforme web.**  
+✅ **Définir l’interface utilisateur (UI/UX) et préparer le design.**  
+✅ **Planifier le développement de l’application mobile.**  
+
+---
+
+## **2️⃣ Sécurisation des Enchères et Prévention de la Fraude**  
+
+### 🔹 **1. Protection contre les Fraudes des Industriels**  
+✅ **Toutes les enchères se déroulent via l’interface officielle** → Aucune manipulation externe possible.  
+✅ **Vérification automatique des fonds avant chaque mise** → Évite les offres fantômes.  
+✅ **Les fonds sont bloqués immédiatement après une mise** → Impossible de se rétracter.  
+
+### 🔹 **2. Détection et Prévention des Tentatives de Manipulation**  
+✅ **Blocage des industriels qui essaient de manipuler les prix** (collusion).  
+✅ **Filtrage automatique des offres trop basses ou répétées (anti-spam).**  
+✅ **Analyse des comportements suspects pour détecter des schémas de fraude.**  
+
+### 🔹 **3. Protection Contre les Enchères Malveillantes**  
+✅ **Interdiction des offres ridiculement basses pour ralentir le système (spam).**  
+✅ **Mécanisme de pénalisation pour les entreprises qui abusent du système.**  
+
+📌 **Ces protections garantissent une enchère 100% transparente et sécurisée.**  
+
+---
+
+## **3️⃣ Développement de la Plateforme Web (Phase 1 - Développement Technique)**  
+
+### **🔹 1. Développement du Frontend (Interface Utilisateur)**  
+✅ **Technologie : React.js avec TypeScript**  
+✅ **Gestion de l’état : Redux ou Context API**  
+✅ **Connexion Web3 avec ethers.js**  
+✅ **Framework UI : Material-UI ou Tailwind CSS**  
+
+### **🔹 2. Développement du Backend (Gestion des Transactions & Sécurité)**  
+✅ **Technologie : Node.js avec Express/NestJS**  
+✅ **Authentification sécurisée avec JWT (JSON Web Token)**  
+✅ **Base de données principale : PostgreSQL**  
+✅ **Stockage des NFT sur IPFS (Pinata/nft.storage)**  
+✅ **Gestion des logs et monitoring via Prometheus/Grafana**  
+
+### **🔹 3. Intégration Blockchain et Smart Contracts**  
+✅ **Blockchain principale : Polygon Mumbai pour testnet**  
+✅ **Smart Contracts en Solidity avec gestion des enchères et NFT Passeport.**  
+✅ **Interaction blockchain optimisée via Web3.js/Ethers.js**  
+
+📌 **Objectif : Avoir une plateforme fonctionnelle avant de commencer les simulations.**  
+
+---
+
+## **4️⃣ Planification de l’Application Mobile (Phase 1.2)**  
+📌 **Une application mobile sera développée en parallèle pour offrir un accès fluide aux enchères.**  
+
+✅ **Technologie envisagée : React Native ou Flutter**  
+✅ **Connexion Web3 avec WalletConnect pour la gestion des NFT.**  
+✅ **Synchronisation avec la plateforme web et l’API backend.**  
+✅ **UX/UI optimisé pour mobile.**  
+
+📌 **L’application mobile sera développée après validation de la plateforme web.**  
+
+---
+
+## **5️⃣ Conception Visuelle et UI/UX (Phase Design)**  
+📌 **Nous devons définir l’identité visuelle et l’expérience utilisateur (UX/UI).**  
+📌 **Le design ne relève pas de Claude, il faudra travailler avec des designers spécialisés.**  
+
+### 🔹 **1. Objectifs du Design :**  
+✅ **Créer une identité visuelle moderne et impactante.**  
+✅ **Définir un parcours utilisateur intuitif pour les enchères et NFT.**  
+✅ **Rendre l’expérience fluide et accessible sur desktop et mobile.**  
+
+📌 **Nous devrons organiser une phase de conception visuelle avec des maquettes avant l’implémentation UI.**  
+
+---
+
+## **📌 6. Prochaine Étape et Suivi**  
+📌 **Nous allons commencer par finaliser l’architecture et le développement de la plateforme web.**  
+📌 **Une fois stable, nous préparerons les tests sur testnet avant de passer à la simulation complète.**  
+📌 **Le design UI/UX devra être validé avant d’intégrer l’application mobile.**  
+
+📌 **👉 Claude, peux-tu finaliser les derniers ajustements techniques et nous proposer un calendrier de développement ?**  
+
+Merci d’avance pour ton retour et tes suggestions ! 🚀🔥  

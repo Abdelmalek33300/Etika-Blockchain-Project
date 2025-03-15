@@ -1,0 +1,560 @@
+// config_and_tests.rs
+// Configuration et tests unitaires pour l'intégration PoP dans le système d'enchères Étika
+
+use super::*;
+use frame_support::{
+    assert_ok, assert_noop,
+    parameter_types,
+};
+use sp_core::H256;
+use sp_runtime::{
+    testing::Header,
+    traits::{BlakeTwo256, IdentityLookup},
+    Perbill,
+};
+
+// Ajouts au trait Config
+parameter_types! {
+    // Période maximale d'inactivité pour une relation sponsor (environ 30 jours en blocs)
+    pub const SponsorRelationshipInactivityPeriod: u32 = 144000; // Environ 10 jours à 6s par bloc
+    
+    // Age maximum d'une transaction PoP (environ 7 jours en blocs)
+    pub const MaxPopTransactionAge: u32 = 100800; // Environ 7 jours à 6s par bloc
+}
+
+impl Config for Test {
+    // Implémentation existante...
+    
+    type SponsorRelationshipInactivityPeriod = SponsorRelationshipInactivityPeriod;
+    type MaxPopTransactionAge = MaxPopTransactionAge;
+}
+
+// Tests pour l'intégration PoP
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    // Test pour register_pop_adoption_evidence
+    #[test]
+    fn register_pop_adoption_evidence_works() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            // Créer une catégorie avec un sponsor
+            let category = b"banking".to_vec();
+            let sponsor = 10; // Un industriel comme sponsor
+            <CategorySponsors<Test>>::insert(category.clone(), sponsor);
+            
+            // Créer une transaction PoP impliquant le sponsor
+            let consumer = 2; // Un consommateur
+            let transaction = PoPTransaction {
+                id: [1u8; 32],
+                consumer: consumer,
+                merchant: sponsor, // Le sponsor est le commerçant dans cette transaction
+                suppliers: vec![],
+                standard_amount: 1000,
+                tokens_exchanged: 100,
+                savings_generated: 50,
+                timestamp: 60000, // 10 blocs environ
+                receipt_hash: [2u8; 32],
+                signatures: vec![(consumer, [0u8; 64]), (sponsor, [0u8; 64])],
+            };
+            
+            // Enregistrer la preuve d'adoption
+            assert_ok!(Module::<Test>::register_pop_adoption_evidence(
+                &transaction,
+                &category
+            ));
+            
+            // Vérifier que l'adoption a été enregistrée
+            assert!(Module::<Test>::adoption_status((consumer, category.clone())));
+            
+            // Vérifier que la dernière interaction a été mise à jour
+            assert_eq!(Module::<Test>::last_sponsor_interaction((consumer, category.clone())), 10);
+            
+            // Vérifier que le score d'engagement a été incrémenté
+            assert_eq!(Module::<Test>::sponsor_engagement_score((consumer, category.clone())), 1);
+            
+            // Vérifier que les événements ont été émis
+            let events = System::events();
+            assert!(events.iter().any(|record| {
+                match &record.event {
+                    Event::AuctionSystem(RawEvent::SponsorInteractionRecorded(c, cat, s, _)) => {
+                        c == &consumer && cat == &category && s == &sponsor
+                    },
+                    _ => false,
+                }
+            }));
+            
+            assert!(events.iter().any(|record| {
+                match &record.event {
+                    Event::AuctionSystem(RawEvent::SponsorRelationshipEstablished(c, cat, s)) => {
+                        c == &consumer && cat == &category && s == &sponsor
+                    },
+                    _ => false,
+                }
+            }));
+        });
+    }
+    
+    // Test pour has_active_sponsor_relationship
+    #[test]
+    fn has_active_sponsor_relationship_works() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            let consumer = 2;
+            let category = b"banking".to_vec();
+            
+            // Cas 1: Pas d'adoption du tout
+            assert!(!Module::<Test>::has_active_sponsor_relationship(&consumer, &category));
+            
+            // Cas 2: Adoption enregistrée mais pas d'interaction récente
+            <AdoptionStatus<Test>>::insert((consumer, category.clone()), true);
+            assert!(!Module::<Test>::has_active_sponsor_relationship(&consumer, &category));
+            
+            // Cas 3: Adoption avec interaction récente
+            let current_block = 100;
+            System::set_block_number(current_block);
+            <LastSponsorInteraction<Test>>::insert(
+                (consumer, category.clone()),
+                current_block - 1000 // Interaction il y a 1000 blocs
+            );
+            
+            // L'interaction est suffisamment récente selon le paramètre de test
+            assert!(Module::<Test>::has_active_sponsor_relationship(&consumer, &category));
+            
+            // Cas 4: Adoption avec interaction trop ancienne
+            System::set_block_number(current_block + SponsorRelationshipInactivityPeriod::get() + 1);
+            assert!(!Module::<Test>::has_active_sponsor_relationship(&consumer, &category));
+        });
+    }
+    
+    // Test pour can_access_ecosystem_benefits
+    #[test]
+    fn can_access_ecosystem_benefits_works() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            let consumer = 2;
+            let category = b"banking".to_vec();
+            
+            // Configuration d'un territoire fonctionnel
+            let territory_id = b"france".to_vec();
+            let territory = TerritoryActivationStatus {
+                territory_id: territory_id.clone(),
+                name: b"France".to_vec(),
+                activation_level: ActivationLevel::FullyOperational,
+                consumer_count: 10,
+                merchant_count: 5,
+                sponsor_categories_filled: vec![category.clone()],
+                available_features: vec![b"monetization".to_vec()],
+                consumer_fund_capitalization: 1000000,
+                activation_timestamp: Some(1),
+                authorized_admins: vec![1],
+            };
+            <Territories<Test>>::insert(territory_id.clone(), territory);
+            
+            // Configurer cette catégorie comme requise pour le territoire
+            <RequiredCategoriesByTerritory<Test>>::insert(
+                territory_id.clone(),
+                vec![category.clone()]
+            );
+            
+            // Cas 1: Pas d'adoption
+            assert!(!Module::<Test>::can_access_ecosystem_benefits(
+                &consumer,
+                Some(&category),
+                Some(&territory_id)
+            ));
+            
+            // Cas 2: Adoption enregistrée mais pas d'interaction récente
+            <AdoptionStatus<Test>>::insert((consumer, category.clone()), true);
+            assert!(!Module::<Test>::can_access_ecosystem_benefits(
+                &consumer,
+                Some(&category),
+                Some(&territory_id)
+            ));
+            
+            // Cas 3: Adoption avec interaction récente
+            <LastSponsorInteraction<Test>>::insert(
+                (consumer, category.clone()),
+                1 // Interaction récente
+            );
+            assert!(Module::<Test>::can_access_ecosystem_benefits(
+                &consumer,
+                Some(&category),
+                Some(&territory_id)
+            ));
+            
+            // Cas 4: Vérification de toutes les catégories requises
+            assert!(Module::<Test>::can_access_ecosystem_benefits(
+                &consumer,
+                None, // Toutes les catégories requises
+                Some(&territory_id)
+            ));
+            
+            // Cas 5: Participant banni
+            <IndustrialStatuses<Test>>::insert(consumer, IndustrialStatus {
+                failed_attempts: 0,
+                is_banned: true,
+                banned_until: 100,
+                ban_reason: Some(SanctionReason::FailedAuction),
+                is_sponsor: false,
+                sponsor_category: None,
+                failed_categories: Vec::new(),
+                sanction_history: Vec::new(),
+                reputation_score: 50,
+                reputation_updated_at: Some(1),
+            });
+            assert!(!Module::<Test>::can_access_ecosystem_benefits(
+                &consumer,
+                Some(&category),
+                Some(&territory_id)
+            ));
+        });
+    }
+    
+    // Test pour is_territory_functional_for_category
+    #[test]
+    fn is_territory_functional_for_category_works() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            let category = b"banking".to_vec();
+            let category2 = b"telecom".to_vec();
+            
+            // Territoire pleinement fonctionnel
+            let territory_full = b"full".to_vec();
+            <Territories<Test>>::insert(territory_full.clone(), TerritoryActivationStatus {
+                territory_id: territory_full.clone(),
+                name: b"Full".to_vec(),
+                activation_level: ActivationLevel::FullyOperational,
+                consumer_count: 10,
+                merchant_count: 5,
+                sponsor_categories_filled: vec![category.clone()],
+                available_features: vec![b"monetization".to_vec()],
+                consumer_fund_capitalization: 1000000,
+                activation_timestamp: Some(1),
+                authorized_admins: vec![1],
+            });
+            
+            // Territoire intermédiaire avec catégorie 1 mais pas catégorie 2
+            let territory_inter = b"inter".to_vec();
+            <Territories<Test>>::insert(territory_inter.clone(), TerritoryActivationStatus {
+                territory_id: territory_inter.clone(),
+                name: b"Inter".to_vec(),
+                activation_level: ActivationLevel::Intermediate,
+                consumer_count: 5,
+                merchant_count: 2,
+                sponsor_categories_filled: vec![category.clone()],
+                available_features: vec![],
+                consumer_fund_capitalization: 500000,
+                activation_timestamp: None,
+                authorized_admins: vec![1],
+            });
+            
+            // Territoire en préparation
+            let territory_prep = b"prep".to_vec();
+            <Territories<Test>>::insert(territory_prep.clone(), TerritoryActivationStatus {
+                territory_id: territory_prep.clone(),
+                name: b"Prep".to_vec(),
+                activation_level: ActivationLevel::Preparation,
+                consumer_count: 1,
+                merchant_count: 0,
+                sponsor_categories_filled: vec![],
+                available_features: vec![],
+                consumer_fund_capitalization: 100000,
+                activation_timestamp: None,
+                authorized_admins: vec![1],
+            });
+            
+            // Vérifier les différentes combinaisons
+            // Territoire pleinement fonctionnel - toutes catégories
+            assert!(Module::<Test>::is_territory_functional_for_category(&territory_full, &category));
+            assert!(Module::<Test>::is_territory_functional_for_category(&territory_full, &category2));
+            
+            // Territoire intermédiaire - seulement catégorie 1
+            assert!(Module::<Test>::is_territory_functional_for_category(&territory_inter, &category));
+            assert!(!Module::<Test>::is_territory_functional_for_category(&territory_inter, &category2));
+            
+            // Territoire en préparation - aucune catégorie
+            assert!(!Module::<Test>::is_territory_functional_for_category(&territory_prep, &category));
+            assert!(!Module::<Test>::is_territory_functional_for_category(&territory_prep, &category2));
+        });
+    }
+    
+    // Test pour process_pop_transaction
+    #[test]
+    fn process_pop_transaction_works() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            // Créer des catégories avec des sponsors
+            let category1 = b"banking".to_vec();
+            let category2 = b"insurance".to_vec();
+            let sponsor1 = 10; // Un industriel comme sponsor pour banking
+            let sponsor2 = 11; // Un industriel comme sponsor pour insurance
+            
+            <CategorySponsors<Test>>::insert(category1.clone(), sponsor1);
+            <CategorySponsors<Test>>::insert(category2.clone(), sponsor2);
+            <AllCategories<Test>>::put(vec![category1.clone(), category2.clone()]);
+            
+            // Autoriser un administrateur pour valider les PoP
+            let admin = 1;
+            <AuthorizedAdmins<Test>>::insert(admin, true);
+            
+            // Créer une transaction PoP impliquant le sponsor1
+            let consumer = 2; // Un consommateur
+            let transaction = PoPTransaction {
+                id: [1u8; 32],
+                consumer: consumer,
+                merchant: sponsor1, // Le sponsor est le commerçant dans cette transaction
+                suppliers: vec![],
+                standard_amount: 1000,
+                tokens_exchanged: 100,
+                savings_generated: 50,
+                timestamp: 60000, // 10 blocs environ
+                receipt_hash: [2u8; 32],
+                signatures: vec![(consumer, [0u8; 64]), (sponsor1, [0u8; 64])],
+            };
+            
+            // Traiter la transaction PoP
+            assert_ok!(Module::<Test>::process_pop_transaction(
+                Origin::signed(admin),
+                transaction.clone()
+            ));
+            
+            // Vérifier que l'adoption a été enregistrée pour la catégorie banking
+            assert!(Module::<Test>::adoption_status((consumer, category1.clone())));
+            
+            // Vérifier que la dernière interaction a été mise à jour
+            assert_eq!(Module::<Test>::last_sponsor_interaction((consumer, category1.clone())), 10);
+            
+            // Vérifier que le score d'engagement a été incrémenté
+            assert_eq!(Module::<Test>::sponsor_engagement_score((consumer, category1.clone())), 1);
+            
+            // Vérifier que les événements ont été émis
+            let events = System::events();
+            assert!(events.iter().any(|record| {
+                match &record.event {
+                    Event::AuctionSystem(RawEvent::SponsorInteractionRecorded(c, cat, s, _)) => {
+                        c == &consumer && cat == &category1 && s == &sponsor1
+                    },
+                    _ => false,
+                }
+            }));
+            
+            assert!(events.iter().any(|record| {
+                match &record.event {
+                    Event::AuctionSystem(RawEvent::PopTransactionProcessed(_, c, m)) => {
+                        c == &consumer && m == &sponsor1
+                    },
+                    _ => false,
+                }
+            }));
+            
+            // Créer une transaction PoP impliquant le sponsor2
+            let transaction2 = PoPTransaction {
+                id: [2u8; 32],
+                consumer: consumer,
+                merchant: 12, // Un autre commerçant
+                suppliers: vec![sponsor2], // Le sponsor2 est un fournisseur
+                standard_amount: 2000,
+                tokens_exchanged: 200,
+                savings_generated: 100,
+                timestamp: 120000, // 20 blocs environ
+                receipt_hash: [3u8; 32],
+                signatures: vec![
+                    (consumer, [0u8; 64]),
+                    (12, [0u8; 64]),
+                    (sponsor2, [0u8; 64])
+                ],
+            };
+            
+            // Traiter la seconde transaction PoP
+            assert_ok!(Module::<Test>::process_pop_transaction(
+                Origin::signed(admin),
+                transaction2.clone()
+            ));
+            
+            // Vérifier que l'adoption a été enregistrée pour la catégorie insurance
+            assert!(Module::<Test>::adoption_status((consumer, category2.clone())));
+            
+            // Vérifier que la dernière interaction a été mise à jour
+            assert_eq!(Module::<Test>::last_sponsor_interaction((consumer, category2.clone())), 20);
+            
+            // Vérifier l'accès aux avantages avec les deux catégories
+            assert!(Module::<Test>::can_access_ecosystem_benefits(
+                &consumer,
+                Some(&category1),
+                None
+            ));
+            
+            assert!(Module::<Test>::can_access_ecosystem_benefits(
+                &consumer,
+                Some(&category2),
+                None
+            ));
+        });
+    }
+    
+    // Test pour record_sponsor_adoption_declaration
+    #[test]
+    fn record_sponsor_adoption_declaration_works() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            let consumer = 2;
+            let category = b"banking".to_vec();
+            let sponsor = 10;
+            
+            // Définir un sponsor pour la catégorie
+            <CategorySponsors<Test>>::insert(category.clone(), sponsor);
+            
+            // Enregistrer une déclaration d'adoption
+            assert_ok!(Module::<Test>::record_sponsor_adoption_declaration(
+                Origin::signed(consumer),
+                category.clone()
+            ));
+            
+            // Vérifier que l'adoption a été enregistrée
+            assert!(Module::<Test>::adoption_status((consumer, category.clone())));
+            
+            // Mais la relation ne devrait pas être considérée active sans PoP
+            assert!(!Module::<Test>::has_active_sponsor_relationship(&consumer, &category));
+            
+            // Vérifier que l'événement a été émis
+            let events = System::events();
+            assert!(events.iter().any(|record| {
+                match &record.event {
+                    Event::AuctionSystem(RawEvent::SponsorAdoptionDeclared(c, cat, s)) => {
+                        c == &consumer && cat == &category && s == &sponsor
+                    },
+                    _ => false,
+                }
+            }));
+        });
+    }
+    
+    // Test pour access_ecosystem_benefit
+    #[test]
+    fn access_ecosystem_benefit_works() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            let consumer = 2;
+            let category = b"banking".to_vec();
+            let sponsor = 10;
+            let benefit_id = [5u8; 32];
+            
+            // Définir un sponsor pour la catégorie
+            <CategorySponsors<Test>>::insert(category.clone(), sponsor);
+            
+            // Cas 1: Pas d'adoption du tout - l'accès devrait être refusé
+            assert_noop!(
+                Module::<Test>::access_ecosystem_benefit(
+                    Origin::signed(consumer),
+                    benefit_id,
+                    Some(category.clone())
+                ),
+                Error::<Test>::AdoptionRequired
+            );
+            
+            // Cas 2: Adoption déclarée mais pas d'interaction PoP - l'accès devrait être refusé
+            <AdoptionStatus<Test>>::insert((consumer, category.clone()), true);
+            assert_noop!(
+                Module::<Test>::access_ecosystem_benefit(
+                    Origin::signed(consumer),
+                    benefit_id,
+                    Some(category.clone())
+                ),
+                Error::<Test>::AdoptionRequired
+            );
+            
+            // Cas 3: Adoption avec interaction PoP récente - l'accès devrait être accordé
+            <LastSponsorInteraction<Test>>::insert(
+                (consumer, category.clone()),
+                1 // Interaction récente
+            );
+            assert_ok!(Module::<Test>::access_ecosystem_benefit(
+                Origin::signed(consumer),
+                benefit_id,
+                Some(category.clone())
+            ));
+            
+            // Vérifier que l'événement a été émis
+            let events = System::events();
+            assert!(events.iter().any(|record| {
+                match &record.event {
+                    Event::AuctionSystem(RawEvent::BenefitAccessGranted(c, id)) => {
+                        c == &consumer && id == &benefit_id
+                    },
+                    _ => false,
+                }
+            }));
+        });
+    }
+    
+    // Test pour validate_pop_transaction
+    #[test]
+    fn validate_pop_transaction_works() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(1);
+            
+            let consumer = 2;
+            let merchant = 10;
+            
+            // Cas 1: Transaction valide avec signatures correctes
+            let valid_transaction = PoPTransaction {
+                id: [1u8; 32],
+                consumer,
+                merchant,
+                suppliers: vec![],
+                standard_amount: 1000,
+                tokens_exchanged: 100,
+                savings_generated: 50,
+                timestamp: System::block_number().saturating_mul(6000), // Timestamp actuel
+                receipt_hash: [2u8; 32],
+                signatures: vec![(consumer, [0u8; 64]), (merchant, [0u8; 64])],
+            };
+            
+            assert!(Module::<Test>::validate_pop_transaction(&valid_transaction));
+            
+            // Cas 2: Transaction trop ancienne
+            let old_transaction = PoPTransaction {
+                id: [2u8; 32],
+                consumer,
+                merchant,
+                suppliers: vec![],
+                standard_amount: 1000,
+                tokens_exchanged: 100,
+                savings_generated: 50,
+                timestamp: 1, // Timestamp très ancien
+                receipt_hash: [3u8; 32],
+                signatures: vec![(consumer, [0u8; 64]), (merchant, [0u8; 64])],
+            };
+            
+            // Avancer le temps pour que la transaction soit considérée comme trop ancienne
+            System::set_block_number(MaxPopTransactionAge::get() + 100);
+            
+            assert!(!Module::<Test>::validate_pop_transaction(&old_transaction));
+            
+            // Cas 3: Transaction avec signature manquante
+            let missing_sig_transaction = PoPTransaction {
+                id: [3u8; 32],
+                consumer,
+                merchant,
+                suppliers: vec![],
+                standard_amount: 1000,
+                tokens_exchanged: 100,
+                savings_generated: 50,
+                timestamp: System::block_number().saturating_mul(6000),
+                receipt_hash: [4u8; 32],
+                signatures: vec![(consumer, [0u8; 64])], // Signature du marchand manquante
+            };
+            
+            assert!(!Module::<Test>::validate_pop_transaction(&missing_sig_transaction));
+        });
+    }
+}
