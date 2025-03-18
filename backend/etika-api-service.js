@@ -194,7 +194,6 @@ app.post('/api/transactions/create', authenticateJWT, async (req, res) => {
       merchant, 
       supplier, 
       amount, 
-      savingsPercentage,
       items,
       locationData,
       origin,
@@ -216,7 +215,6 @@ app.post('/api/transactions/create', authenticateJWT, async (req, res) => {
       merchant,
       supplier,
       amount,
-      savingsPercentage,
       items,
       locationData,
       origin,
@@ -312,7 +310,6 @@ app.post('/api/tokens/convert', authenticateJWT, async (req, res) => {
 });
 
 // Endpoints délégation d'épargne
-app.post('/api/savings/delegate', authenticateJWT, async (req, res) => {
   try {
     const { delegateAddress } = req.body;
     
@@ -334,7 +331,6 @@ app.post('/api/savings/delegate', authenticateJWT, async (req, res) => {
   }
 });
 
-app.post('/api/savings/undelegate', authenticateJWT, async (req, res) => {
   try {
     // Définir le compte actif comme étant l'utilisateur authentifié
     etikaService.setCurrentAccount(req.user.address);
