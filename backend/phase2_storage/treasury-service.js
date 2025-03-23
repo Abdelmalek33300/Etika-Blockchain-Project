@@ -2,17 +2,24 @@
 // Service pour gérer la caisse commune sponsorisée
 
 import Web3 from 'web3';
-import { logError } from './utils/errorTracking.js';
-import { getSecureItem } from '../utils/secureStorage.js';
+import { logError } from '../utils/errorTracking.js';
+import { decryptData } from '../utils/secureStorage.js';
 import fs from 'fs';
 
-const SponsorTreasuryABI = JSON.parse(
-  fs.readFileSync(new URL('../contracts/SponsorTreasuryABI.json', import.meta.url))
-);
+let SponsorTreasuryABI = {};
+try {
+    const abiData = fs.readFileSync(new URL('../contracts/SponsorTreasuryABI.json', import.meta.url));
+    SponsorTreasuryABI = JSON.parse(abiData);
+} catch (error) {
+    console.warn('⚠️ ABI du contrat non chargé (fichier manquant)');
+}
+
+  //fs.readFileSync(new URL('../contracts/SponsorTreasuryABI.json', import.meta.url))
+
 
 import config from '../config.js';
-import { Sector } from '../models/Sector.js';
-import { Company } from '../models/Company.js';
+import Sector from '../models/Sector.js';
+import Company from '../models/Company.js';
 
 class TreasuryService {
   constructor() {

@@ -448,4 +448,4 @@ class SecurityMiddleware {
   }
 }
 
-module.exports = SecurityMiddleware;
+export default SecurityMiddleware;

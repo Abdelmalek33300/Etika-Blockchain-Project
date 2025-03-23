@@ -1,6 +1,7 @@
-const mongoose = require('mongoose');
-const { MongoClient } = require('mongodb');
-const Redis = require('ioredis');
+import mongoose from 'mongoose';
+import { MongoClient } from 'mongodb';
+import Redis from 'ioredis';
+
 
 class DatabaseService {
   constructor(config = {}) {
@@ -422,4 +423,4 @@ class DatabaseService {
   }
 }
 
-module.exports = DatabaseService;
+export default DatabaseService;
