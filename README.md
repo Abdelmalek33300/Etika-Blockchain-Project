@@ -1,3 +1,9 @@
+> ℹ️ Nettoyage du dépôt le 2025-09-02. Les modules hérités sont déplacés dans `archive/` (historique conservé).
+> **À lire d’abord :**
+> - `docs/` : documents conceptuels (FR/EN)
+> - `whitepaper-translations/` : traductions du whitepaper
+> - `Etika-Blockchain-Project/ecosystem/core/docs/` : notes détaillées sur le Proof of Purchase (PoP)
+
 # Étika – Empowering Citizens to Monetize Their Consumer Power for a Sustainable Future
 # Étika-Blockchain-Project
 
