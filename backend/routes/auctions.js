@@ -55,3 +55,11 @@ router.post('/', requireAuth, requireAdmin, (req, res) => {
 });
 
 export default router;
+
+/** GET /api/auctions/:id — détail d'une enchère */
+router.get('/:id', (req, res) => {
+  const items = readAuctions();
+  const found = items.find(a => a.id === req.params.id);
+  if (!found) return res.status(404).json({ error: 'Not found' });
+  res.json(found);
+});
