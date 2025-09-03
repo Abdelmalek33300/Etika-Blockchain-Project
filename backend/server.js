@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 
 import authRouter from './routes/auth.js';
+import auctionsRouter from './routes/auctions.js';
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ app.use(express.json({ limit: '1mb' }));
 
 // Routes
 app.use('/api/auth', authRouter);
+app.use('/api/auctions', auctionsRouter);
 
 // Healthcheck
 app.get('/api/health', (req, res) => {
@@ -36,5 +38,3 @@ const cert = fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'));
 https.createServer({ key, cert }, app).listen(PORT, () => {
   console.log(`✅ HTTPS API running on https://localhost:${PORT}`);
 });
-
-// Probe temporaire
