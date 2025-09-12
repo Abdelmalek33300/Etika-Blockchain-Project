@@ -13,6 +13,7 @@ import auctionsRouter from './routes/auctions.js';
 import bidsRouter from './routes/bids.js';
 import auctionsPg from './routes/auctions-pg.mjs';
 import bidsPg from './routes/bids-pg.mjs';
+import auctionsBidsAlias from './routes/auctions-bids-alias.js';
 import auctionsAdminRouter from './routes/auctions-admin-router.js';
 
 dotenv.config();
@@ -31,8 +32,19 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-app.use(cors());
+const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+const corsOptions = {
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // curl/node
+    if (allowed.includes(origin)) return cb(null, true);
+    return cb(null, false);
+  },
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '1mb' }));
+app.use('/api/auctions', auctionsBidsAlias);
 app.use('/api/admin/auctions', auctionsAdminRouter);
 
 // Servir les fichiers statiques du dossier ./public
@@ -63,3 +75,6 @@ const cert = fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'));
 https.createServer({ key, cert }, app).listen(PORT, () => {
   console.log(`✅ HTTPS API running on https://localhost:${PORT}`);
 });
+
+
+
