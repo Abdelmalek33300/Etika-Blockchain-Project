@@ -5,6 +5,8 @@ import path from 'path';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 
@@ -27,12 +29,25 @@ const app = express();
 app.use("/api/pg", pgRouter);
 
 // SÃ©curitÃ© (assouplie pour le dev local afin d'autoriser le script de la page)
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false
-}));
-
-const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+if (process.env.NODE_ENV === 'production') {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "frame-ancestors": ["'none'"],
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"]
+      }
+    },
+    crossOriginEmbedderPolicy: true,
+    referrerPolicy: { policy: "no-referrer" },
+    hsts: { maxAge: 15552000, includeSubDomains: true, preload: true }
+  }));
+} else {
+  // Dev local : CSP désactivée pour ne rien casser
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+}const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 const corsOptions = {
   origin: (origin, cb) => {
     if (!origin) return cb(null, true); // curl/node
@@ -44,6 +59,8 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '1mb' }));
+const loginLimiter = rateLimit({ windowMs: 15*60*1000, max: 10, standardHeaders: true, legacyHeaders: false });
+app.use('/api/auth/login', loginLimiter);
 app.use('/api/auctions', auctionsBidsAlias);
 app.use('/api/admin/auctions', auctionsAdminRouter);
 
@@ -75,6 +92,9 @@ const cert = fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'));
 https.createServer({ key, cert }, app).listen(PORT, () => {
   console.log(`âœ… HTTPS API running on https://localhost:${PORT}`);
 });
+
+
+
 
 
 
