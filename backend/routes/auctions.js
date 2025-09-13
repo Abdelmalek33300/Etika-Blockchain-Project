@@ -1,65 +1,78 @@
+// routes/auctions.js (ESM)
 import express from 'express';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { v4 as uuidv4 } from 'uuid';
-import { requireAuth, requireAdmin } from '../services/jwt.js';
+import path from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { query, validationResult } from 'express-validator';
+import pagination from '../utils/pagination.js'; // CJS interop
+const { paginateAndSort } = pagination;
 
 const router = express.Router();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const AUCTIONS_FILE = path.join(DATA_DIR, 'auctions.json');
 
-function readAuctions() {
+// ——— Fallback JSON ———
+async function loadJson(relative) {
   try {
-    const raw = fs.readFileSync(AUCTIONS_FILE, 'utf8');
+    const full = path.join(__dirname, '..', relative);
+    const raw = await readFile(full, 'utf8');
     return JSON.parse(raw);
   } catch {
     return [];
   }
 }
 
-function writeAuctions(list) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(AUCTIONS_FILE, JSON.stringify(list, null, 2), 'utf8');
+// ——— Service optionnel (si présent) ———
+async function listAuctionsPublic() {
+  try {
+    const mod = await import('../services/auctions-service.js');
+    const svc = mod.default || mod;
+    if (svc?.listPublic) return await svc.listPublic();
+  } catch {}
+  return loadJson('data/auctions.json');
 }
 
-// GET /api/auctions — liste
-router.get('/', (req, res) => {
-  const items = readAuctions();
-  res.json({ items, total: items.length });
-});
+// ——— Validators ———
+const listAuctionsValidators = [
+  query('page').optional().isInt({ min: 1 }).toInt(),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('sort').optional().isIn(['createdAt', 'endsAt', 'title', 'sector']),
+  query('order').optional().isIn(['asc', 'desc']),
+];
 
-// POST /api/auctions — créer (admin)
-router.post('/', requireAuth, requireAdmin, (req, res) => {
-  const { sector, title, description, startsAt, endsAt } = req.body || {};
-  if (!sector || !title || !startsAt || !endsAt) {
-    return res.status(400).json({ error: 'Missing required fields: sector, title, startsAt, endsAt' });
+// ——— Helper ———
+function ensureValid(req, res) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(422).json({ errors: errors.array().map(e => ({ field: e.param, msg: e.msg })) });
   }
-  const items = readAuctions();
-  const created = {
-    id: uuidv4(),
-    sector,
-    title,
-    description: description || '',
-    startsAt,
-    endsAt,
-    status: 'open',
-    createdAt: new Date().toISOString()
-  };
-  items.push(created);
-  writeAuctions(items);
-  res.status(201).json(created);
+  return null;
+}
+
+// ——— Route publique ———
+// GET /api/auctions — pagination + tri (défaut: date de fin croissante)
+router.get('/', listAuctionsValidators, async (req, res, next) => {
+  try {
+    const invalid = ensureValid(req, res);
+    if (invalid) return;
+
+    const { page = 1, limit = 10, sort, order = 'asc' } = req.query;
+    const auctions = await listAuctionsPublic();
+
+    const sortKey = sort || 'endsAt';
+    const sortType =
+      sortKey === 'createdAt' || sortKey === 'endsAt' ? 'date' :
+      sortKey === 'title' || sortKey === 'sector' ? 'string' : 'string';
+
+    const { meta, items } = paginateAndSort(auctions, {
+      page, limit, sort: sortKey, order, sortType, maxLimit: 100,
+    });
+
+    return res.json({ ...meta, items });
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;
-
-/** GET /api/auctions/:id — détail d'une enchère */
-router.get('/:id', (req, res) => {
-  const items = readAuctions();
-  const found = items.find(a => a.id === req.params.id);
-  if (!found) return res.status(404).json({ error: 'Not found' });
-  res.json(found);
-});

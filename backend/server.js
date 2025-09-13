@@ -1,100 +1,145 @@
-import https from 'https';
-import { pgRouter } from './routes/pg-router.mjs';
-import fs from 'fs';
-import path from 'path';
+// server.js — ESM, HTTPS, CORS, Helmet, rate-limit, PG router par défaut
 import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-
-import rateLimit from 'express-rate-limit';
+import https from 'node:https';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
+import helmet from 'helmet';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 
+// 🔐 Routes (CJS acceptées via default import)
 import authRouter from './routes/auth.js';
-import auctionsRouter from './routes/auctions.js';
-import bidsRouter from './routes/bids.js';
-import auctionsPg from './routes/auctions-pg.mjs';
-import bidsPg from './routes/bids-pg.mjs';
-import auctionsBidsAlias from './routes/auctions-bids-alias.js';
-import auctionsAdminRouter from './routes/auctions-admin-router.js';
+import adminAuctionsRouter from './routes/auctions-admin-router.js';
+import aliasBidsRouter from './routes/auctions-bids-alias.js';
+
+// ✅ Router PostgreSQL (export défaut)
+import pgRouter from './routes/pg-router.mjs';
+
+// (Optionnel si tu gardes les routes JSON de secours)
+// import auctionsRouter from './routes/auctions.js';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 4433;
-
 const app = express();
-app.use("/api/pg", pgRouter);
 
-// Sécurité (assouplie pour le dev local afin d'autoriser le script de la page)
-if (process.env.NODE_ENV === 'production') {
-  app.use(helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        "default-src": ["'self'"],
-        "frame-ancestors": ["'none'"],
-        "object-src": ["'none'"],
-        "base-uri": ["'self'"]
-      }
-    },
-    crossOriginEmbedderPolicy: true,
-    referrerPolicy: { policy: "no-referrer" },
-    hsts: { maxAge: 15552000, includeSubDomains: true, preload: true }
-  }));
+// ———————————————————————————————————————————————
+// Sécurité & middlewares
+// ———————————————————————————————————————————————
+const isProd = process.env.NODE_ENV === 'production';
+
+app.use(express.json({ limit: '1mb' }));
+
+// Helmet : prod strict, dev assoupli
+if (isProd) {
+  app.use(helmet());
 } else {
-  // Dev local : CSP d�sactiv�e pour ne rien casser
-  app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
-}const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      hsts: false,
+    }),
+  );
+}
+
+// CORS whitelist depuis .env (ALLOWED_ORIGINS=origin1,origin2)
+const allowed = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
 const corsOptions = {
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/node
+  origin(origin, cb) {
+    if (!origin) return cb(null, true); // outils locaux
     if (allowed.includes(origin)) return cb(null, true);
-    return cb(null, false);
+    return cb(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  optionsSuccessStatus: 200
 };
+
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '1mb' }));
-const loginLimiter = rateLimit({ windowMs: 15*60*1000, max: 10, standardHeaders: true, legacyHeaders: false });
+
+// Rate-limit spécifique au login
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 app.use('/api/auth/login', loginLimiter);
-app.use('/api/auctions', auctionsBidsAlias);
-app.use('/api/admin/auctions', auctionsAdminRouter);
 
-// Servir les fichiers statiques du dossier ./public
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Routes API
-app.use('/api/auth', authRouter);
-if (process.env.USE_PG === '1') {
-  console.log('[BOOT] Using PostgreSQL for /api/auctions & /api/bids');
-  app.use('/api/auctions', auctionsPg);
-  app.use('/api/bids', bidsPg);
-} else {
-  app.use('/api/auctions', auctionsRouter);
-  app.use('/api/bids', bidsRouter);
-}
-app.use('/api/auctions-pg', auctionsPg);
-app.use('/api/bids-pg', bidsPg);
-
-// Healthcheck
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, env: process.env.NODE_ENV || 'dev' });
+// ———————————————————————————————————————————————
+// Health
+// ———————————————————————————————————————————————
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, env: isProd ? 'production' : 'development' });
 });
 
-// HTTPS credentials
-const key = fs.readFileSync(path.join(__dirname, 'certs', 'key.pem'));
-const cert = fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'));
+// ———————————————————————————————————————————————
+/**
+ * Routes
+ * - /api/auth           -> authRouter
+ * - /api/admin/auctions -> adminAuctionsRouter
+ * - /api                 -> pgRouter (auctions + bids via PostgreSQL)
+ * - /api/auctions/:id/bids -> alias vers /api/bids/:auctionId
+ */
+// ———————————————————————————————————————————————
+app.use('/api/auth', authRouter);
+app.use('/api/admin/auctions', adminAuctionsRouter);
 
-https.createServer({ key, cert }, app).listen(PORT, () => {
+// PostgreSQL router (auctions & bids)
+console.log('[BOOT] Using PostgreSQL for /api/auctions & /api/bids');
+app.use('/api', pgRouter);
+
+// Alias public: /api/auctions/:id/bids  -> renvoie les bids d’une enchère
+app.use('/api/auctions', aliasBidsRouter);
+
+// (Optionnel) Fallback JSON si tu veux garder l’ancien routeur hors-PG
+// app.use('/api/auctions', auctionsRouter);
+
+// ———————————————————————————————————————————————
+// HTTPS server
+// ———————————————————————————————————————————————
+const PORT = Number(process.env.PORT_HTTPS || 4443);
+
+// Recherche des certificats (plusieurs chemins possibles)
+function readFirstKeyPair() {
+  const candidates = [
+    { key: process.env.SSL_KEY_FILE, cert: process.env.SSL_CERT_FILE },
+    { key: path.join(__dirname, 'localhost-key.pem'), cert: path.join(__dirname, 'localhost-cert.pem') },
+    { key: path.join(__dirname, 'certs', 'server.key'), cert: path.join(__dirname, 'certs', 'server.crt') },
+    { key: path.join(__dirname, 'certs', 'key.pem'), cert: path.join(__dirname, 'certs', 'cert.pem') },
+  ].filter(p => p.key && p.cert);
+
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p.key) && fs.existsSync(p.cert)) {
+        return { key: fs.readFileSync(p.key), cert: fs.readFileSync(p.cert) };
+      }
+    } catch {}
+  }
+  throw new Error('TLS key/cert introuvables. Configure SSL_KEY_FILE / SSL_CERT_FILE ou place tes certs dans ./certs/');
+}
+
+const tls = readFirstKeyPair();
+
+const server = https.createServer(tls, app);
+
+server.listen(PORT, () => {
   console.log(`✅ HTTPS API running on https://localhost:${PORT}`);
 });
 
-
-
-
-
-
+// Gestion propre des erreurs d’écoute
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} déjà utilisé.`);
+  } else {
+    console.error(err);
+  }
+  process.exit(1);
+});
