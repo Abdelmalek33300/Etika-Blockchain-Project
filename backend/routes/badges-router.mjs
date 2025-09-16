@@ -1,5 +1,7 @@
 ﻿import express from "express";
 import { Pool } from "pg";
+import { enforceWhitelist, isKnownSector } from '../config/sectors.mjs';
+
 
 const router = express.Router();
 
@@ -29,6 +31,7 @@ router.post("/api/badges/request", async (req, res) => {
   const { consumer_id, sector, proof } = req.body ?? {};
 
   const errors = [];
+  if (enforceWhitelist && !(typeof sector === 'string' && isKnownSector(sector))) { errors.push({ field: 'sector', msg: 'unknown sector' }); }
   if (!isUUID(consumer_id)) errors.push({ field: "consumer_id", msg: "consumer_id must be a UUID" });
   if (!(typeof sector === "string" && sector.length >= 1 && sector.length <= 50))
     errors.push({ field: "sector", msg: "sector must be 1-50 chars" });
@@ -71,6 +74,7 @@ router.post("/api/badges/request", async (req, res) => {
 router.post("/api/badges/verify", async (req, res) => {
   const { badge_id } = req.body ?? {};
   const errors = [];
+  if (enforceWhitelist && !(typeof sector === 'string' && isKnownSector(sector))) { errors.push({ field: 'sector', msg: 'unknown sector' }); }
   if (!isUUID(badge_id)) errors.push({ field: "badge_id", msg: "badge_id must be a UUID" });
   if (errors.length) return res.status(400).json(bad(errors));
 
@@ -98,3 +102,4 @@ router.post("/api/badges/verify", async (req, res) => {
 });
 
 export default router;
+
