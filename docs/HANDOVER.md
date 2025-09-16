@@ -70,3 +70,29 @@ Si SECTORS_ENFORCE=true, seuls les slug présents seront acceptés côté API.
 20250916_add_badge_contact_fields.sql a ajouté :  
 email, phone, email_verified_at, phone_verified_at à la table adges.
 
+---
+
+## Smokes rapides (2025-09-16 22:59)
+
+### 1) Flow badge par email (dev)
+- **Fenêtre 2** (serveur déjà lancé en Fenêtre 1)  
+\
+ode .\backend\scripts\smoke-badges-email.mjs mobile\
+
+> Attendu : \OK smoke: { sector: 'mobile', ... status: 'verified' }\
+
+### 2) Liste admin des derniers badges vérifiés
+- **Fenêtre 2**  
+\
+ode .\backend\scripts\smoke-admin-badges.mjs\
+
+> Attendu : 5 lignes \id | sector | verified_at\ avec code 200 côté API admin.
+
+### 3) Compteurs publics
+- **Fenêtre 2**  
+\
+ode .\backend\scripts\get-public-counters.mjs\
+
+> Attendu : \HTTP 200\ avec \	otal_badges\ et \per_sector\ cohérents.
+
+_Note rate-limit_: \/api/badges/request-email\ est limité à **5 req / 10 min / IP** (HTTP 429 au-delà).
