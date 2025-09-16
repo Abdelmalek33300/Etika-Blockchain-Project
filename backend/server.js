@@ -1,4 +1,4 @@
-// server.js — ESM, HTTPS, CORS, Helmet, rate-limit, PG router par défaut
+﻿// server.js â€” ESM, HTTPS, CORS, Helmet, rate-limit, PG router par dÃ©faut
 import express from 'express';
 import https from 'node:https';
 import fs from 'node:fs';
@@ -9,12 +9,12 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 
-// 🔐 Routes (CJS acceptées via default import)
+// ðŸ” Routes (CJS acceptÃ©es via default import)
 import authRouter from './routes/auth.js';
 import adminAuctionsRouter from './routes/auctions-admin-router.js';
 import aliasBidsRouter from './routes/auctions-bids-alias.js';
 
-// ✅ Router PostgreSQL (export défaut)
+// âœ… Router PostgreSQL (export dÃ©faut)
 import pgRouter from './routes/pg-router.mjs';
 
 // (Optionnel si tu gardes les routes JSON de secours)
@@ -25,14 +25,17 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+import badgesRouter from './routes/badges-router.mjs';
+
 const app = express();
 
-// ———————————————————————————————————————————————
-// Sécurité & middlewares
-// ———————————————————————————————————————————————
+// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
+// SÃ©curitÃ© & middlewares
+// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
 const isProd = process.env.NODE_ENV === 'production';
 
 app.use(express.json({ limit: '1mb' }));
+app.use(badgesRouter);
 
 // Helmet : prod strict, dev assoupli
 if (isProd) {
@@ -64,7 +67,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Rate-limit spécifique au login
+// Rate-limit spÃ©cifique au login
 const loginLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 10,
@@ -73,14 +76,14 @@ const loginLimiter = rateLimit({
 });
 app.use('/api/auth/login', loginLimiter);
 
-// ———————————————————————————————————————————————
+// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
 // Health
-// ———————————————————————————————————————————————
+// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, env: isProd ? 'production' : 'development' });
 });
 
-// ———————————————————————————————————————————————
+// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
 /**
  * Routes
  * - /api/auth           -> authRouter
@@ -88,7 +91,7 @@ app.get('/api/health', (_req, res) => {
  * - /api                 -> pgRouter (auctions + bids via PostgreSQL)
  * - /api/auctions/:id/bids -> alias vers /api/bids/:auctionId
  */
-// ———————————————————————————————————————————————
+// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
 app.use('/api/auth', authRouter);
 app.use('/api/admin/auctions', adminAuctionsRouter);
 
@@ -96,15 +99,15 @@ app.use('/api/admin/auctions', adminAuctionsRouter);
 console.log('[BOOT] Using PostgreSQL for /api/auctions & /api/bids');
 app.use('/api', pgRouter);
 
-// Alias public: /api/auctions/:id/bids  -> renvoie les bids d’une enchère
+// Alias public: /api/auctions/:id/bids  -> renvoie les bids dâ€™une enchÃ¨re
 app.use('/api/auctions', aliasBidsRouter);
 
-// (Optionnel) Fallback JSON si tu veux garder l’ancien routeur hors-PG
+// (Optionnel) Fallback JSON si tu veux garder lâ€™ancien routeur hors-PG
 // app.use('/api/auctions', auctionsRouter);
 
-// ———————————————————————————————————————————————
+// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
 // HTTPS server
-// ———————————————————————————————————————————————
+// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
 const PORT = Number(process.env.PORT_HTTPS || 4443);
 
 // Recherche des certificats (plusieurs chemins possibles)
@@ -131,15 +134,16 @@ const tls = readFirstKeyPair();
 const server = https.createServer(tls, app);
 
 server.listen(PORT, () => {
-  console.log(`✅ HTTPS API running on https://localhost:${PORT}`);
+  console.log(`âœ… HTTPS API running on https://localhost:${PORT}`);
 });
 
-// Gestion propre des erreurs d’écoute
+// Gestion propre des erreurs dâ€™Ã©coute
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} déjà utilisé.`);
+    console.error(`âŒ Port ${PORT} dÃ©jÃ  utilisÃ©.`);
   } else {
     console.error(err);
   }
   process.exit(1);
 });
+
