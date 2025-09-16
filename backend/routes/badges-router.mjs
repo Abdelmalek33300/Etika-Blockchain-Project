@@ -1,5 +1,8 @@
 ﻿import express from "express";
 import { Pool } from "pg";
+import { signToken } from '../services/jwt.js';
+import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
 import { enforceWhitelist, isKnownSector } from '../config/sectors.mjs';
 
 
@@ -101,5 +104,111 @@ router.post("/api/badges/verify", async (req, res) => {
   }
 });
 
+/**
+ * POST /api/badges/request-email
+ * Body: { email:string, sector:string }
+ * Dev: renvoie aussi magic_link (non-prod) pour cliquer et valider.
+ */
+router.post("/api/badges/request-email", async (req, res) => {
+  const { email, sector } = req.body ?? {};
+  const errors = [];
+  const validEmail = (v) => typeof v === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
+
+  if (!validEmail(email)) errors.push({ field: "email", msg: "invalid email" });
+  if (!(typeof sector === "string" && sector.length >= 1 && sector.length <= 50))
+    errors.push({ field: "sector", msg: "sector must be 1-50 chars" });
+  if (enforceWhitelist && !(typeof sector === "string" && isKnownSector(sector)))
+    errors.push({ field: "sector", msg: "unknown sector" });
+
+  if (errors.length) return res.status(400).json(bad(errors));
+
+  let client;
+  try {
+    client = await pool.connect();
+
+    // 1) existe déjà (email+sector, actif) ?
+    const findSql = `
+      SELECT id, consumer_id, sector, status, requested_at, verified_at, email
+        FROM badges
+       WHERE sector = $1 AND email = $2
+         AND status IN ('requested','verified')
+       ORDER BY requested_at DESC
+       LIMIT 1`;
+    const f = await client.query(findSql, [sector, email]);
+    let badge;
+
+    if (f.rowCount > 0) {
+      badge = f.rows[0];
+    } else {
+      // 2) créer un badge "requested"
+      const sql = `
+        INSERT INTO badges (id, consumer_id, sector, status, email, proof_json)
+        VALUES ($1, $2, $3, 'requested', $4, COALESCE($5::jsonb, '{}'::jsonb))
+        RETURNING id, consumer_id, sector, status, requested_at, verified_at, email
+      `;
+      const id = randomUUID();
+      const consumer_id = randomUUID();
+      const proof = { source: "request-email" };
+      const r = await client.query(sql, [id, consumer_id, sector, email, JSON.stringify(proof)]);
+      badge = r.rows[0];
+    }
+
+    // 3) magic link 24h
+    const token = signToken({ kind: "email-verify", badge_id: badge.id, email }, "24h");
+    const magic_link = `https://localhost:4443/api/badges/verify-email?token=${encodeURIComponent(token)}`;
+
+    const out = { ok: true, badge };
+    if (process.env.NODE_ENV !== "production") out.magic_link = magic_link;
+    return res.json(out);
+  } catch (e) {
+    console.error("POST /api/badges/request-email", e);
+    return res.status(500).json({ error: "internal_error" });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+/**
+ * GET /api/badges/verify-email?token=...
+ * Effet: passe le badge "verified" + renseigne email_verified_at.
+ */
+router.get("/api/badges/verify-email", async (req, res) => {
+  const token = req.query?.token;
+  if (!token) return res.status(400).json({ error: "missing_token" });
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    if (!payload || payload.kind !== "email-verify" || !payload.badge_id || !payload.email) {
+      return res.status(400).json({ error: "invalid_token" });
+    }
+
+    let client;
+    try {
+      client = await pool.connect();
+      const upd = await client.query(
+        `UPDATE badges
+            SET status = 'verified',
+                email_verified_at = COALESCE(email_verified_at, now())
+          WHERE id = $1 AND email = $2
+          RETURNING id, consumer_id, sector, status, requested_at, verified_at, email, email_verified_at`,
+        [payload.badge_id, payload.email]
+      );
+      if (upd.rowCount === 0) return res.status(404).json({ error: "not_found" });
+      return res.json({ ok: true, badge: upd.rows[0] });
+    } finally {
+      if (client) client.release();
+    }
+  } catch (e) {
+    console.error("GET /api/badges/verify-email", e);
+    return res.status(400).json({ error: "invalid_or_expired_token" });
+  }
+});
 export default router;
+
+
+
+
+
+
+
 
