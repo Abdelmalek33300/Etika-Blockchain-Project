@@ -67,7 +67,7 @@ router.get('/public/counters', async (req, res, next) => {
        ) AS exists`
     );
 
-    let per_sector = [];
+    let per_sector = {};
     if (hasSector.rows[0]?.exists) {
       const perQ = await pool.query(
         `SELECT COALESCE(sector,'unknown') AS sector, COUNT(*)::int AS n
@@ -76,7 +76,8 @@ router.get('/public/counters', async (req, res, next) => {
           GROUP BY 1
           ORDER BY n DESC`
       );
-      per_sector = perQ.rows;
+      const rows = perQ.rows;
+      per_sector = Object.fromEntries(rows.map(r => [r.sector, r.n]));
     }
 
     const percent = THRESHOLD > 0 ? Math.min(100, Math.floor((total * 100) / THRESHOLD)) : 0;
@@ -191,6 +192,7 @@ router.get('/bids/:auctionId', async (req, res, next) => {
 });
 
 export default router;
+
 
 
 
