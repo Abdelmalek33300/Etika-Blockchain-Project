@@ -1,6 +1,6 @@
 ﻿/* routes/pg-router.mjs  ESM v5.1
  * - /public/counters (seuil/compteur)
- * - /auctions : pagination + tri + filtre status (archived masquées par défaut)
+ * - /auctions : pagination + tri + filtre status (archived masquÃ©es par dÃ©faut)
  * - /bids/:auctionId : pagination + tri
  */
 
@@ -9,7 +9,8 @@ import pkg from 'pg';
 
 const { Pool } = pkg;
 const router = express.Router();
-
+// Bypass: laisse /api/public/counters au handler dÃ©diÃ© (public-counters-router / fast-path)
+router.use('/public/counters', (req,res,next)=> next());
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: false } : false,
@@ -53,7 +54,7 @@ router.get('/public/counters', async (req, res, next) => {
     const totalQ = await pool.query(
       `SELECT COUNT(*)::int AS n
          FROM badges
-        WHERE COALESCE(status,'active')='active'`
+        WHERE status='verified'`
     );
     const total = totalQ.rows[0]?.n ?? 0;
 
@@ -71,7 +72,7 @@ router.get('/public/counters', async (req, res, next) => {
       const perQ = await pool.query(
         `SELECT COALESCE(sector,'unknown') AS sector, COUNT(*)::int AS n
            FROM badges
-          WHERE COALESCE(status,'active')='active'
+          WHERE status='verified'
           GROUP BY 1
           ORDER BY n DESC`
       );
@@ -190,3 +191,6 @@ router.get('/bids/:auctionId', async (req, res, next) => {
 });
 
 export default router;
+
+
+
