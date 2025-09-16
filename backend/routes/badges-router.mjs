@@ -1,4 +1,6 @@
 ﻿import express from "express";
+
+import rateLimit from 'express-rate-limit';
 import { Pool } from "pg";
 import { signToken } from '../services/jwt.js';
 import jwt from 'jsonwebtoken';
@@ -12,6 +14,14 @@ const router = express.Router();
 // Sans effet secondaire si dÃ©jÃ  appliquÃ© au niveau app.
 router.use(express.json({ limit: "256kb" }));
 
+
+const requestEmailLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 5,                    // 5 requêtes max / fenêtre / IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too_many_requests" },
+});
 // Pool PG minimal (reutilise DATABASE_URL existant)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -109,7 +119,7 @@ router.post("/api/badges/verify", async (req, res) => {
  * Body: { email:string, sector:string }
  * Dev: renvoie aussi magic_link (non-prod) pour cliquer et valider.
  */
-router.post("/api/badges/request-email", async (req, res) => {
+router.post("/api/badges/request-email", requestEmailLimiter, async (req, res) => {
   const { email, sector } = req.body ?? {};
   const errors = [];
   const validEmail = (v) => typeof v === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
@@ -204,6 +214,8 @@ router.get("/api/badges/verify-email", async (req, res) => {
   }
 });
 export default router;
+
+
 
 
 
