@@ -1,0 +1,13 @@
+﻿Public Dashboard  Front Quickstart (2025-09-18, Europe/Paris)
+
+Fenêtre 1 (serveur) :
+  Set-Location .\backend
+  $Env:JWT_SECRET="etika-dev-secret-1234567890abcdef1234567890abcdef"
+  node server.js
+
+Fenêtre 2 (frontend) :
+  npm --prefix frontend run dev
+
+Checks utiles :
+  npm --prefix backend run smoke:dashboard
+  curl https://localhost:4443/api/public/dashboard
