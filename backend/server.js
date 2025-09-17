@@ -1,4 +1,5 @@
-﻿// server.js â€” ESM, HTTPS, CORS, Helmet, rate-limit, PG router par dÃ©faut
+﻿import adminBadgesRouter from './routes/admin-badges-router.mjs';
+// server.js â€” ESM, HTTPS, CORS, Helmet, rate-limit, PG router par dÃ©faut
 import express from 'express';
 import https from 'node:https';
 import fs from 'node:fs';
@@ -26,9 +27,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 import badgesRouter from './routes/badges-router.mjs';
+import publicDashboardRouter from "./routes/publicDashboardRouter.mjs";
 
 const app = express();
 
+app.use(publicDashboardRouter);
 // â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
 // SÃ©curitÃ© & middlewares
 // â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
@@ -146,4 +149,10 @@ server.on('error', (err) => {
   }
   process.exit(1);
 });
+
+
+// Admin auctions router
+app.use(adminAuctionsRouter);
+// Admin badges router
+app.use(adminBadgesRouter);
 
