@@ -1,5 +1,5 @@
-﻿import adminBadgesRouter from './routes/admin-badges-router.mjs';
-// server.js â€” ESM, HTTPS, CORS, Helmet, rate-limit, PG router par dÃ©faut
+﻿// server.js — ESM, HTTPS, CORS, Helmet, rate-limit
+
 import express from 'express';
 import https from 'node:https';
 import fs from 'node:fs';
@@ -10,149 +10,133 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 
-// ðŸ” Routes (CJS acceptÃ©es via default import)
+// Routes (CJS acceptées via default import)
 import authRouter from './routes/auth.js';
 import adminAuctionsRouter from './routes/auctions-admin-router.js';
 import aliasBidsRouter from './routes/auctions-bids-alias.js';
 
-// âœ… Router PostgreSQL (export dÃ©faut)
+// PostgreSQL router
 import pgRouter from './routes/pg-router.mjs';
 
-// (Optionnel si tu gardes les routes JSON de secours)
-// import auctionsRouter from './routes/auctions.js';
+// Routers publics
+import publicDashboardRouter from './routes/publicDashboardRouter.mjs';
+import badgesRouter from './routes/badgesRouter.mjs';
 
-dotenv.config();
+// (optionnel) Admin badges si présent
+import adminBadgesRouter from './routes/admin-badges-router.mjs';
+
+// --- Init app & env
+const app = express();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '.env') });
 
-import badgesRouter from './routes/badges-router.mjs';
-import publicDashboardRouter from "./routes/publicDashboardRouter.mjs";
-
-const app = express();
-
-app.use(publicDashboardRouter);
-// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
-// SÃ©curitÃ© & middlewares
-// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
-const isProd = process.env.NODE_ENV === 'production';
-
+// --- Sécurité + JSON
+app.use(helmet());
 app.use(express.json({ limit: '1mb' }));
-app.use(badgesRouter);
 
-// Helmet : prod strict, dev assoupli
-if (isProd) {
-  app.use(helmet());
-} else {
-  app.use(
-    helmet({
-      contentSecurityPolicy: false,
-      crossOriginEmbedderPolicy: false,
-      hsts: false,
-    }),
-  );
-}
-
-// CORS whitelist depuis .env (ALLOWED_ORIGINS=origin1,origin2)
-const allowed = (process.env.ALLOWED_ORIGINS || '')
+// --- CORS (autoriser Vite en dev)
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
 
-const corsOptions = {
-  origin(origin, cb) {
-    if (!origin) return cb(null, true); // outils locaux
-    if (allowed.includes(origin)) return cb(null, true);
-    return cb(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-};
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // outils locaux (curl, node probe, etc.)
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error('Not allowed by CORS'), false);
+    },
+    credentials: true,
+  })
+);
 
-app.use(cors(corsOptions));
+// --- Healthcheck
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, env: process.env.NODE_ENV || 'development' });
+});
 
-// Rate-limit spÃ©cifique au login
+// --- Routes publiques (après CORS)
+app.use(publicDashboardRouter); // GET /api/public/dashboard (anti-cache + last_updated live)
+//
+// --- PUBLIC: liste des compétiteurs pour une enchère (MVP: stub vide, prêt à brancher DB) ---
+app.get('/api/public/auctions/:id/bids', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ ok: false, error: 'auction id invalide' });
+    }
+    // MVP : renvoie une liste vide -> l'UI affiche "Aucun compétiteur pour le moment."
+    return res.json([]);
+  } catch (e) {
+    console.error('[public bids] error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+app.use(badgesRouter);          // POST /api/badges/request, POST /api/badges/verify
+
+// --- Anti-bruteforce sur login
 const loginLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use('/api/auth/login', loginLimiter);
 
-// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
-// Health
-// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, env: isProd ? 'production' : 'development' });
-});
-
-// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
-/**
- * Routes
- * - /api/auth           -> authRouter
- * - /api/admin/auctions -> adminAuctionsRouter
- * - /api                 -> pgRouter (auctions + bids via PostgreSQL)
- * - /api/auctions/:id/bids -> alias vers /api/bids/:auctionId
- */
-// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
-app.use('/api/auth', authRouter);
+// --- Auth & admin
+app.use(authRouter);
 app.use('/api/admin/auctions', adminAuctionsRouter);
 
-// PostgreSQL router (auctions & bids)
-console.log('[BOOT] Using PostgreSQL for /api/auctions & /api/bids');
-app.use('/api', pgRouter);
+// --- Aliases enchères (si utilisé)
+app.use(aliasBidsRouter);
 
-// Alias public: /api/auctions/:id/bids  -> renvoie les bids dâ€™une enchÃ¨re
-app.use('/api/auctions', aliasBidsRouter);
+// --- PostgreSQL (si activé)
+app.use(pgRouter);
 
-// (Optionnel) Fallback JSON si tu veux garder lâ€™ancien routeur hors-PG
-// app.use('/api/auctions', auctionsRouter);
-
-// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
-// HTTPS server
-// â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”
-const PORT = Number(process.env.PORT_HTTPS || 4443);
-
-// Recherche des certificats (plusieurs chemins possibles)
-function readFirstKeyPair() {
-  const candidates = [
-    { key: process.env.SSL_KEY_FILE, cert: process.env.SSL_CERT_FILE },
-    { key: path.join(__dirname, 'localhost-key.pem'), cert: path.join(__dirname, 'localhost-cert.pem') },
-    { key: path.join(__dirname, 'certs', 'server.key'), cert: path.join(__dirname, 'certs', 'server.crt') },
-    { key: path.join(__dirname, 'certs', 'key.pem'), cert: path.join(__dirname, 'certs', 'cert.pem') },
-  ].filter(p => p.key && p.cert);
-
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p.key) && fs.existsSync(p.cert)) {
-        return { key: fs.readFileSync(p.key), cert: fs.readFileSync(p.cert) };
-      }
-    } catch {}
-  }
-  throw new Error('TLS key/cert introuvables. Configure SSL_KEY_FILE / SSL_CERT_FILE ou place tes certs dans ./certs/');
-}
-
-const tls = readFirstKeyPair();
-
-const server = https.createServer(tls, app);
-
-server.listen(PORT, () => {
-  console.log(`âœ… HTTPS API running on https://localhost:${PORT}`);
-});
-
-// Gestion propre des erreurs dâ€™Ã©coute
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`âŒ Port ${PORT} dÃ©jÃ  utilisÃ©.`);
-  } else {
-    console.error(err);
-  }
-  process.exit(1);
-});
-
-
-// Admin auctions router
-app.use(adminAuctionsRouter);
-// Admin badges router
+// --- Admin badges (si présent)
 app.use(adminBadgesRouter);
 
+// --- HTTPS dev server (certs locaux)
+const options = {
+  key: fs.readFileSync(path.join(__dirname, 'certs', 'localhost-key.pem')),
+  cert: fs.readFileSync(path.join(__dirname, 'certs', 'localhost.pem')),
+};
+
+const PORT = 4443;
+https.createServer(options, app).listen(PORT, () => {
+  console.log(`HTTPS dev: https://localhost:${PORT}`);
+});
+//
+// --- PUBLIC: liste des compétiteurs pour une enchère (MVP: stub vide, prêt à brancher DB) ---
+try {
+  if (typeof app?.get === "function") {
+    app.get("/api/public/auctions/:id/bids", async (req, res) => {
+      try {
+        const { id } = req.params;
+        if (!id || typeof id !== "string") {
+          return res.status(400).json({ ok: false, error: "auction id invalide" });
+        }
+
+        // TODO (Phase 2) : brancher la base de données ici.
+        // const r = await db.query(
+        //   "SELECT sponsor, amount_cents, created_at AS at FROM auction_bids WHERE auction_id=$1 ORDER BY amount_cents DESC LIMIT 100",
+        //   [id]
+        // );
+        // return res.json(r.rows);
+
+        // MVP : liste vide
+        return res.json([]);
+      } catch (e) {
+        console.error("[public bids] error", e);
+        return res.status(500).json({ ok: false, error: "server_error" });
+      }
+    });
+
+    console.log("[public] /api/public/auctions/:id/bids prêt (MVP vide)");
+  }
+} catch (e) {
+  console.warn("Ajout de la route /api/public/auctions/:id/bids ignoré (app introuvable)", e?.message || e);
+}
