@@ -1,95 +1,57 @@
-﻿import { useEffect, useState } from "react";
+﻿// frontend/src/App.jsx
+import { useEffect, useState } from "react";
+import BadgesPanel from "./components/BadgesPanel.jsx";
+import AuctionsPanel from "./components/AuctionsPanel.jsx";
 
-function Euro({ cents }) {
-  if (cents == null) return <span></span>;
-  const euros = (Number(cents) / 100).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return <span>{euros} €</span>;
-}
+/**
+ * App.jsx — dashboard public Étika
+ * - Carte Badges (compteurs par secteur)
+ * - Carte Enchères (meilleurs bids)
+ */
 
 export default function App() {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [boot, setBoot] = useState({ ok: false, error: null });
 
-  async function load() {
-    try {
-      setLoading(true);
-      setErr("");
-      const res = await fetch("/api/public/dashboard", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setData(json);
-    } catch (e) {
-      setErr(e.message || String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { load(); }, []);
-
-  const body = !data ? (
-    <div>Chargement</div>
-  ) : (
-    (() => {
-      const { counters, best_bids } = data;
-      return (
-        <>
-          <section style={{ marginBottom: 24 }}>
-            <h2>Compteurs</h2>
-            <div>Seuil de lancement: {counters.threshold.toLocaleString("fr-FR")}</div>
-            <div>Total badges: {counters.total_badges.toLocaleString("fr-FR")}</div>
-            <div>Avancement: {counters.percent}%</div>
-            <h3>Par secteur (vérifiés)</h3>
-            <ul>
-              {Object.entries(counters.per_sector).map(([sector, n]) => (
-                <li key={sector}>
-                  <strong>{sector}</strong>: {n}
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section>
-            <h2>Meilleures offres (enchères actives)</h2>
-            <table cellPadding="8" style={{ borderCollapse: "collapse", width: "100%" }}>
-              <thead>
-                <tr>
-                  <th align="left">Titre</th>
-                  <th align="left">Secteur</th>
-                  <th align="right">Nb d'offres</th>
-                  <th align="right">Meilleure offre</th>
-                  <th align="left">ID</th>
-                </tr>
-              </thead>
-              <tbody>
-                {best_bids.map(a => (
-                  <tr key={a.id} style={{ borderTop: "1px solid #ddd" }}>
-                    <td>{a.title}</td>
-                    <td>{a.sector}</td>
-                    <td align="right">{a.bids}</td>
-                    <td align="right"><Euro cents={a.top_amount_cents} /></td>
-                    <td style={{ fontFamily: "monospace" }}>{a.id}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        </>
-      );
-    })()
-  );
+  useEffect(() => {
+    let abort = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/public/dashboard", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!abort) setBoot({ ok: true, error: null, data: json });
+      } catch (e) {
+        if (!abort) setBoot({ ok: false, error: e.message || String(e) });
+      }
+    })();
+    return () => {
+      abort = true;
+    };
+  }, []);
 
   return (
-    <div style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif", padding: 24 }}>
-      <h1>Étika  Public Dashboard</h1>
-      <div style={{ marginBottom: 16 }}>
-        <button onClick={load} disabled={loading} style={{ padding: "8px 12px", cursor: loading ? "not-allowed" : "pointer" }}>
-          {loading ? "Rafraîchissement..." : "Rafraîchir"}
-        </button>
-        {err ? <span style={{ color: "crimson", marginLeft: 12 }}>Erreur: {err}</span> : null}
+    <div style={{ maxWidth: 1100, margin: "24px auto", padding: "0 16px", fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" }}>
+      <header style={{ marginBottom: 16 }}>
+        <h1 style={{ margin: 0, fontSize: 28 }}>Étika — Dashboard public</h1>
+        <div style={{ color: "#666", fontSize: 13 }}>
+          Backend: <code>https://localhost:4443</code> — Frontend: <code>http://localhost:5173</code>
+        </div>
+        {!boot.ok && (
+          <div style={{ marginTop: 8, fontSize: 13, color: "#a00" }}>
+            {boot.error ? `Chargement initial: ${boot.error}` : "Chargement initial..."}
+          </div>
+        )}
+      </header>
+
+      {/* Cartes */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
+        <BadgesPanel />
+        <AuctionsPanel />
       </div>
-      {body}
+
+      <section style={{ marginTop: 16, fontSize: 12, color: "#888" }}>
+        <em>Astuce :</em> on ajoutera d’autres cartes (ex. détails d’une enchère) au fil de l’eau.
+      </section>
     </div>
   );
 }

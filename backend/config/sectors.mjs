@@ -1,15 +1,15 @@
-ï»¿/** Liste centrale des secteurs (extensible) */
+/** Liste centrale des secteurs (extensible) */
 const normalize = (s) => String(s ?? '').toLowerCase();
 
 export const SECTORS_RAW = [
-  ['mobile',        'TÃ©lÃ©phonie mobile'],
+  ['mobile',        'Téléphonie mobile'],
   ['box_internet',  'Box internet'],
   ['bank',          'Banque'],
   ['insurance',     'Assurance'],
   ['mutual',        'Mutuelle'],
   ['payment_card',  'Carte de paiement'],
   ['vod',           'VOD'],
-  ['energy',        'Ã‰nergie'],
+  ['electricity','Électricité'],
   ['search_engine', 'Moteur de recherche'],
 ];
 
@@ -22,3 +22,4 @@ export const isKnownSector = (slug) => knownSlugs.has(normalize(slug));
 
 /** Optionnel : activer une whitelist stricte via l'env */
 export const enforceWhitelist = process.env.SECTORS_ENFORCE === 'true';
+

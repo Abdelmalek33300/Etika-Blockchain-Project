@@ -1,4 +1,4 @@
-ï»¿import https from "https";
+import https from "https";
 
 const TOKEN = process.env.TOKEN;
 if (!TOKEN) {
@@ -7,14 +7,14 @@ if (!TOKEN) {
 }
 
 const sectors = [
-  ["mobile",          "TÃ©lÃ©phonie mobile"],
+  ["mobile",          "Téléphonie mobile"],
   ["box_internet",    "Box internet"],
   ["bank",            "Banque"],
   ["insurance",       "Assurance"],
   ["mutual",          "Mutuelle"],
   ["payment_card",    "Carte de paiement"],
   ["vod",             "VOD"],
-  ["energy",          "Ã‰nergie"],
+  ["electricity","Électricité"],
   ["search_engine",   "Moteur de recherche"],
 ];
 
@@ -49,7 +49,7 @@ function req(method, path, body) {
 }
 
 (async () => {
-  // 1) RÃ©cupÃ©rer les enchÃ¨res existantes (all)
+  // 1) Récupérer les enchères existantes (all)
   const list = await req("GET", "/api/admin/auctions?status=all&limit=200");
   const items = list?.json?.items ?? [];
 
@@ -74,3 +74,4 @@ function req(method, path, body) {
   console.error("ERR", e.message);
   process.exit(1);
 });
+
