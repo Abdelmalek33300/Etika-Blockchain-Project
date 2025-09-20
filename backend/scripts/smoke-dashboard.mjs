@@ -1,4 +1,7 @@
-﻿const base = process.env.BASE_URL || "https://localhost:4443";
+﻿import { Agent, setGlobalDispatcher } from "undici";
+setGlobalDispatcher(new Agent({ connect: { rejectUnauthorized: false } }));
+
+const base = process.env.BASE_URL || "https://localhost:4443";
 const origin = process.env.SMOKE_ORIGIN || "http://localhost:5173";
 
 const fail = (msg, extra) => { console.error("FAIL:", msg, extra ?? ""); process.exit(1); };

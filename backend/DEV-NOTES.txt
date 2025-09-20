@@ -1,0 +1,73 @@
+# Étika – Notes de Développement (Backend)
+
+## Organisation des terminaux
+- **Terminal 1 (Invite de commandes / cmd.exe)**  
+  Sert uniquement à lancer et laisser tourner le serveur Node.js.
+
+- **Terminal 2 (Git Bash)**  
+  Sert aux commandes courantes : tests avec `curl`, scripts, `git`, etc.
+
+---
+
+## Lancer le serveur (Terminal 1)
+cd C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend
+node server.js
+
+Attendu :
+[BOOT] Using PostgreSQL for /api/auctions & /api/bids
+✅ HTTPS API running on https://localhost:4443
+
+---
+
+## Tester l’API (Terminal 2 – Git Bash)
+# Liste des enchères
+curl -sk https://localhost:4443/api/auctions
+
+# Bids d’une enchère
+curl -sk https://localhost:4443/api/bids/976b4adb-2c8a-4a04-b439-830ef7c4c15d
+
+---
+
+## Problème courant : port 4443 occupé (EADDRINUSE)
+Si `Error: listen EADDRINUSE` apparaît, libérer le port :
+
+1. Vérifier et tuer le process :
+pwsh -Command "$p=Get-NetTCPConnection -LocalPort 4443 -State Listen -ErrorAction SilentlyContinue | Select -Expand OwningProcess -Unique; if($p){ Stop-Process -Id $p -Force; Write-Host ('Killed PID '+$p) } else { Write-Host 'No listener on 4443' }"
+
+2. Relancer le serveur :
+cd C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend
+node server.js
+
+---
+
+## Bonnes pratiques
+- Ne jamais mélanger serveur et commandes dans le même terminal.
+- Toujours laisser **Terminal 1** tourner en continu avec `node server.js`.
+- Utiliser **Terminal 2** pour tout le reste.
+
+---
+
+## Script pratique
+
+- **free-port-4443.cmd**  
+  (dans le dossier backend)  
+  → Double-cliquer dessus si erreur `EADDRINUSE` apparaît.  
+  → Le script libère automatiquement le port 4443.  
+  Ensuite, relancer le serveur avec :
+    node server.js
+
+- **restart-server.cmd**
+  (dans le dossier backend)
+  → Double-cliquer dessus pour :
+    1. Tuer le process qui bloque le port 4443 (si présent)
+    2. Redémarrer automatiquement le serveur Node.js
+
+---
+
+## Astuce
+Pour relire ce fichier dans le Bloc-notes Windows :
+    notepad DEV-NOTES.txt
+
+- **open-notes.cmd**
+  (dans le dossier backend)
+  → Double-cliquer dessus pour ouvrir ce fichier DEV-NOTES.txt

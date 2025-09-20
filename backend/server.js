@@ -24,6 +24,7 @@ import badgesRouter from './routes/badgesRouter.mjs';
 
 // (optionnel) Admin badges si présent
 import adminBadgesRouter from './routes/admin-badges-router.mjs';
+import publicAuctionsRouter from './routes/public-auctions-router.js';
 
 // --- Init app & env
 const app = express();
@@ -61,20 +62,9 @@ app.get('/api/health', (req, res) => {
 // --- Routes publiques (après CORS)
 app.use(publicDashboardRouter); // GET /api/public/dashboard (anti-cache + last_updated live)
 //
+app.use(publicAuctionsRouter); // GET /api/public/auctions/:id/bids (public, no auth)
 // --- PUBLIC: liste des compétiteurs pour une enchère (MVP: stub vide, prêt à brancher DB) ---
-app.get('/api/public/auctions/:id/bids', async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!id || typeof id !== 'string') {
-      return res.status(400).json({ ok: false, error: 'auction id invalide' });
-    }
-    // MVP : renvoie une liste vide -> l'UI affiche "Aucun compétiteur pour le moment."
-    return res.json([]);
-  } catch (e) {
-    console.error('[public bids] error', e);
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
+app.get("/api/public/auctions/:id/bids", (req, res, next) => next()); // disabled inline stub  use router
 app.use(badgesRouter);          // POST /api/badges/request, POST /api/badges/verify
 
 // --- Anti-bruteforce sur login
@@ -113,30 +103,8 @@ https.createServer(options, app).listen(PORT, () => {
 // --- PUBLIC: liste des compétiteurs pour une enchère (MVP: stub vide, prêt à brancher DB) ---
 try {
   if (typeof app?.get === "function") {
-    app.get("/api/public/auctions/:id/bids", async (req, res) => {
-      try {
-        const { id } = req.params;
-        if (!id || typeof id !== "string") {
-          return res.status(400).json({ ok: false, error: "auction id invalide" });
-        }
+app.get("/api/public/auctions/:id/bids", (req, res, next) => next()); // disabled inline stub  use router
 
-        // TODO (Phase 2) : brancher la base de données ici.
-        // const r = await db.query(
-        //   "SELECT sponsor, amount_cents, created_at AS at FROM auction_bids WHERE auction_id=$1 ORDER BY amount_cents DESC LIMIT 100",
-        //   [id]
-        // );
-        // return res.json(r.rows);
-
-        // MVP : liste vide
-        return res.json([]);
-      } catch (e) {
-        console.error("[public bids] error", e);
-        return res.status(500).json({ ok: false, error: "server_error" });
-      }
-    });
-
-    console.log("[public] /api/public/auctions/:id/bids prêt (MVP vide)");
   }
 } catch (e) {
-  console.warn("Ajout de la route /api/public/auctions/:id/bids ignoré (app introuvable)", e?.message || e);
 }

@@ -1,0 +1,37 @@
+﻿import "dotenv/config";
+
+const base = process.env.BASE_URL || "https://localhost:4443";
+const origin = process.env.SMOKE_ORIGIN || "http://localhost:5173";
+
+const fail = (msg, extra) => {
+  console.error("FAIL:", msg, extra ?? "");
+  process.exit(1);
+};
+
+try {
+  const res = await fetch(`${base}/api/public/dashboard`, {
+    headers: { Origin: origin },
+  });
+
+  if (!res.ok) fail(`HTTP ${res.status}`);
+
+  const allow = res.headers.get("access-control-allow-origin");
+  if (allow !== origin) fail("CORS header mismatch", { expect: origin, got: allow });
+
+  const data = await res.json();
+  if (!data || typeof data !== "object") fail("Invalid JSON body");
+  if (!data.counters) fail("Missing 'counters'");
+  if (!Array.isArray(data.best_bids)) fail("Missing 'best_bids' array");
+
+  const { threshold, total_badges, per_sector } = data.counters;
+  if (typeof threshold !== "number") fail("counters.threshold not number");
+  if (typeof total_badges !== "number") fail("counters.total_badges not number");
+  if (!per_sector || typeof per_sector !== "object") fail("counters.per_sector not object");
+
+  console.log("OK dashboard smoke ");
+  console.log(`- CORS: ${allow}`);
+  console.log(`- total_badges: ${total_badges}`);
+  console.log(`- best_bids: ${data.best_bids.length} items`);
+} catch (e) {
+  fail(e.message);
+}

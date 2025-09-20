@@ -1,0 +1,42 @@
+[
+  {
+    "id": "74efde8d-39d8-4403-8d64-d65285e0d3bf",
+    "sector": "Télécom",
+    "title": "Test T2",
+    "description": "test token ok",
+    "startsAt": "2025-10-01T08:00:00.000Z",
+    "endsAt": "2025-10-15T18:00:00.000Z",
+    "status": "open",
+    "createdAt": "2025-09-08T10:08:52.159Z"
+  },
+  {
+    "id": "2c3f2d53-5702-4691-9179-89eb47e0ed54",
+    "sector": "Télécom",
+    "title": "Télécom 1",
+    "description": "",
+    "startsAt": "2025-10-01T08:00:00.000Z",
+    "endsAt": "2025-10-15T18:00:00.000Z",
+    "status": "upcoming",
+    "createdAt": "2025-09-08T12:36:16.729Z"
+  },
+  {
+    "id": "64bb7cbd-b936-4614-8f5b-ea9c38c120f6",
+    "sector": "Téléphonie",
+    "title": "Télécom forfait mobile",
+    "description": "",
+    "startsAt": "2025-09-09T06:00:00.000Z",
+    "endsAt": "2025-09-10T13:00:00.000Z",
+    "status": "upcoming",
+    "createdAt": "2025-09-09T00:21:18.367Z"
+  },
+  {
+    "id": "976b4adb-2c8a-4a04-b439-830ef7c4c15d",
+    "sector": "Télécom",
+    "title": "télécom forfait",
+    "description": "",
+    "startsAt": "2025-09-09T08:00:00.000Z",
+    "endsAt": "2025-09-10T09:00:00.000Z",
+    "status": "upcoming",
+    "createdAt": "2025-09-09T00:32:36.483Z"
+  }
+]

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline' 'self'; script-src 'self' 'unsafe-inline'">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Étika — Admin Enchères</title>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#111827; --panel-2:#1f2937;
+      --text:#f9fafb; --muted:#94a3b8;
+      --accent:#60a5fa; --warn:#fbbf24; --danger:#f87171; --ok:#22c55e;
+      --badge:#0ea5e9; --row:#0b1224; --row-alt:#0d1730; --border:#22304c;
+    }
+    *{box-sizing:border-box}
+    body{ margin:0; background:linear-gradient(180deg,#0b1224 0%,#0f172a 60%,#0b1224 100%); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial; min-height:100svh; }
+    header{ padding:20px 16px; border-bottom:1px solid var(--border); background: rgba(17,24,39,0.6); backdrop-filter: blur(6px); position:sticky; top:0; z-index:5; }
+    .container{ max-width:1100px; margin:0 auto; padding:16px; }
+    h1{ margin:0 0 6px 0; font-size:20px; letter-spacing:.3px }
+    .sub{ color:var(--muted); font-size:13px }
+
+    .grid{ display:grid; gap:16px; grid-template-columns: 1.2fr .8fr; }
+    @media (max-width: 980px){ .grid{ grid-template-columns:1fr } }
+
+    .card{ background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%); border:1px solid var(--border); border-radius:16px; overflow:hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+    .card h2{ margin:0; font-size:16px; padding:14px 16px; border-bottom:1px solid var(--border); background: rgba(255,255,255,0.02); }
+    .card .content{ padding:14px 16px; }
+
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    label{ font-size:12px; color:var(--muted) }
+    input[type="text"], input[type="datetime-local"], select, textarea{
+      background:#0a1328; border:1px solid var(--border); color:var(--text); padding:10px 12px; border-radius:10px; outline:none; width:100%;
+    }
+    input[type="text"]::placeholder{ color:#64748b }
+    textarea{ resize:vertical; min-height:56px }
+    .hint{ font-size:12px; color:var(--muted); margin-top:6px }
+    .muted{ color:var(--muted) }
+    .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+    button{ border:1px solid var(--border); color:var(--text); background: #0b1224; padding:10px 14px; border-radius:10px; cursor:pointer; transition: transform .06s ease, background .2s ease, opacity .2s ease; }
+    button:hover{ background:#0f1a35 } button:active{ transform: translateY(1px) }
+    .primary{ background: linear-gradient(180deg,#2563eb,#1d4ed8); border-color: rgba(255,255,255,0.1) }
+    .danger{ background: linear-gradient(180deg,#ef4444,#dc2626); border-color: rgba(255,255,255,0.08) }
+    .ghost{ background: transparent }
+
+    .badge{ display:inline-block; font-size:11px; padding:3px 7px; border-radius:999px; background: linear-gradient(180deg,#0284c7,#0369a1); border:1px solid rgba(255,255,255,0.12) }
+    .badge.success{ background: linear-gradient(180deg,#10b981,#059669) }
+    .badge.warn{ background: linear-gradient(180deg,#f59e0b,#d97706) }
+    .badge.danger{ background: linear-gradient(180deg,#ef4444,#dc2626) }
+
+    table{ width:100%; border-collapse:separate; border-spacing:0 10px; }
+    thead th{ font-size:12px; text-align:left; color:var(--muted); font-weight:600; padding:4px 10px; }
+    tbody tr{ background: linear-gradient(180deg, var(--row) 0%, var(--row-alt) 100%); border:1px solid var(--border); border-radius:12px; box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
+    tbody td{ padding:12px 10px; vertical-align:middle }
+    tbody tr td:first-child{ border-top-left-radius:12px; border-bottom-left-radius:12px }
+    tbody tr td:last-child{ border-top-right-radius:12px; border-bottom-right-radius:12px }
+
+    .status-dot{ width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px }
+    .dot-open{ background:var(--ok) } .dot-upcoming{ background:var(--warn) } .dot-closed{ background:var(--danger) }
+
+    .divider{ height:1px; background:var(--border); margin:12px 0 }
+    .right{ margin-left:auto }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace }
+    .pill{ display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px; background:#0a1328; border:1px solid var(--border) }
+
+    .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,0.55); display:none; align-items:center; justify-content:center; z-index:50; }
+    .modal{ width:min(720px, 92vw); border-radius:16px; overflow:hidden }
+    .modal .content{ max-height:70svh; overflow:auto }
+    .best{ outline:2px solid var(--accent); box-shadow: 0 0 0 4px rgba(96,165,250,0.18) inset }
+    .best-badge{ margin-left:8px; }
+
+    /* Loader décalé (pour ne pas masquer "Prêt") */
+    .dot-loader{
+      width:8px; height:8px; border-radius:50%;
+      background:var(--badge); display:inline-block;
+      margin-right:30px;
+      box-shadow: 10px 0 0 var(--badge), 20px 0 0 var(--badge);
+      animation: bounce 1.2s infinite ease-in-out; vertical-align: middle;
+    }
+    @keyframes bounce{ 0%,80%,100%{ box-shadow:10px 0 0 var(--badge),20px 0 0 var(--badge); } 40%{ box-shadow:10px -6px 0 var(--badge),20px 6px 0 var(--badge);} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>Étika — Tableau admin (enchères)</h1>
+      <div class="sub">HTTPS local : <span class="mono">https://localhost:4433</span> · Coller un token JWT admin ci-dessous (trim auto). Filtre par statut dans la liste.</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <!-- LISTE ENCHERES -->
+      <section class="card" id="card-list">
+        <h2>Enchères
+          <span class="right pill" id="statusPanel">
+            <label for="statusSelect">Filtrer :</label>
+            <select id="statusSelect" aria-label="Filtre par statut">
+              <option value="">Tout</option>
+              <option value="open">Ouvertes</option>
+              <option value="upcoming">À venir</option>
+              <option value="closed">Closes</option>
+            </select>
+          </span>
+        </h2>
+        <div class="content">
+          <div class="row" style="justify-content:space-between; gap:12px; margin-bottom:10px">
+            <div class="pill">
+              <span class="dot-loader" aria-hidden="true"></span>
+              <span id="loadState" class="muted">Prêt</span>
+            </div>
+            <div class="actions">
+              <button id="btnReload" class="ghost" title="Recharger la liste">Recharger</button>
+            </div>
+          </div>
+
+          <table aria-label="Table des enchères">
+            <thead>
+              <tr>
+                <th>Enchère</th>
+                <th>Secteur</th>
+                <th>Statut</th>
+                <th>Meilleur bid</th>
+                <th class="right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="auctionsTbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Panneau AUTH + CREATION -->
+      <section class="card">
+        <h2>Admin · Auth & Création</h2>
+        <div class="content">
+          <div>
+            <label for="token">JWT admin (stocké localement · trimming auto)</label>
+            <textarea id="token" placeholder="Collez ici votre token admin…"></textarea>
+            <div class="actions" style="margin-top:8px">
+              <button class="primary" id="btnSaveToken">Enregistrer le token</button>
+              <button class="ghost" id="btnClearToken">Vider</button>
+            </div>
+            <div class="hint">Astuce (Windows Git Bash) : <span class="mono">winpty node -e "…"</span></div>
+            <div class="divider"></div>
+          </div>
+
+          <div>
+            <h3 style="margin:0 0 8px 0; font-size:14px">Créer une enchère</h3>
+
+            <div class="row">
+              <div style="flex:1">
+                <label for="newTitle">Titre</label>
+                <input id="newTitle" type="text" placeholder="ex. Télécom — Forfait mobile" />
+              </div>
+            </div>
+
+            <div class="row" style="margin-top:10px">
+              <div style="flex:1">
+                <label for="newSector">Secteur</label>
+                <input id="newSector" type="text" list="sectors" placeholder="ex. Télécom" />
+                <datalist id="sectors">
+                  <option value="Télécom"><option value="Banque"><option value="Assurance"><option value="Mutuelle / Prévoyance"><option value="Électricité"><option value="Gaz"><option value="Fournisseur Internet"><option value="VOD / Streaming"><option value="Grande distribution"><option value="Transport">
+                </datalist>
+                <div class="hint">Saisie libre : tu peux taper un autre secteur si besoin.</div>
+              </div>
+            </div>
+
+            <div class="row" style="margin-top:10px">
+              <div style="flex:1">
+                <label for="newStart">Début (obligatoire)</label>
+                <input id="newStart" type="datetime-local" />
+              </div>
+              <div style="flex:1">
+                <label for="newEnd">Fin (obligatoire)</label>
+                <input id="newEnd" type="datetime-local" />
+              </div>
+            </div>
+
+            <div class="actions" style="margin-top:10px">
+              <button class="primary" id="btnCreate">Créer</button>
+            </div>
+
+            <div class="hint">Champs requis par l’API : <span class="mono">title, sector, startsAt, endsAt</span>.</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- MODAL BIDS -->
+  <div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <section class="card modal">
+      <h2 id="modalTitle">Bids</h2>
+      <div class="content">
+        <table aria-label="Table des bids">
+          <thead>
+            <tr><th>Bidder</th><th>Montant (€)</th><th>Date</th></tr>
+          </thead>
+          <tbody id="bidsTbody"></tbody>
+        </table>
+      </div>
+      <div class="content" style="border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:8px">
+        <button class="ghost" id="btnCloseModal">Fermer</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const API_BASE = location.origin;
+    const qs = sel => document.querySelector(sel);
+    const elToken = qs('#token'), elSave = qs('#btnSaveToken'), elClear = qs('#btnClearToken');
+    const elReload = qs('#btnReload'), elStatus = qs('#statusSelect'), elState = qs('#loadState'), elTbody = qs('#auctionsTbody');
+    const elNewTitle = qs('#newTitle'), elNewSector = qs('#newSector'), elNewStart = qs('#newStart'), elNewEnd = qs('#newEnd'), elCreate = qs('#btnCreate');
+    const modalBackdrop = qs('#modalBackdrop'), btnCloseModal = qs('#btnCloseModal'), bidsTbody = qs('#bidsTbody'), modalTitle = qs('#modalTitle');
+
+    let currentAuctions = [];
+
+    function loadToken(){ const t=(localStorage.getItem('adminToken')||'').trim(); elToken.value=t; return t; }
+    function saveToken(){ const t=(elToken.value||'').trim(); localStorage.setItem('adminToken',t); elToken.value=t; toast('Token enregistré.'); return t; }
+    function clearToken(){ localStorage.removeItem('adminToken'); elToken.value=''; toast('Token effacé.'); }
+
+    let toastTimer; function toast(msg){ elState.textContent=msg; clearTimeout(toastTimer); toastTimer=setTimeout(()=>{ elState.textContent='Prêt'; },2200); }
+
+    function statusBadge(status){
+      let dot = '<span class="status-dot dot-open"></span>', label = 'Ouverte', cls='success';
+      if(status==='upcoming'){ dot='<span class="status-dot dot-upcoming"></span>'; label='À venir'; cls='warn'; }
+      if(status==='closed'){ dot='<span class="status-dot dot-closed"></span>'; label='Close'; cls='danger'; }
+      return `${dot}<span class="badge ${cls}">${label}</span>`;
+    }
+
+    function euros(v){ if(typeof v!=='number') return '—'; return new Intl.NumberFormat('fr-FR',{ style:'currency', currency:'EUR'}).format(v); }
+
+    // <<<< Normalisation des différentes formes de réponses >>>>
+    function normalizeAuctions(data){
+      try{
+        if(Array.isArray(data)) return data;
+        if(data && Array.isArray(data.auctions)) return data.auctions;
+        if(data && Array.isArray(data.items)) return data.items;
+        if(data && data.data && Array.isArray(data.data.auctions)) return data.data.auctions;
+        // Si c'est un objet "enchère" unique avec un id ou un title -> le transformer en tableau
+        if(data && typeof data==='object' && (data.id || data.title)) return [data];
+        return [];
+      }catch{ return []; }
+    }
+
+    async function fetchAuctions(){
+      elState.textContent = 'Chargement…';
+      const status = elStatus.value;
+      const url = new URL('/api/auctions', API_BASE);
+      if(status) url.searchParams.set('status', status);
+      const r = await fetch(url.toString(), { headers:{ 'Accept':'application/json' }});
+      if(!r.ok){
+        elState.textContent = 'Erreur chargement';
+        const tx = await r.text().catch(()=> '');
+        console.error('GET /api/auctions failed', r.status, tx);
+        return;
+      }
+      const data = await r.json();
+      currentAuctions = normalizeAuctions(data);
+      renderAuctions();
+      const label = status ? `Filtre « ${labelFromStatus(status)} »` : 'Sans filtre';
+      elState.textContent = `OK · ${currentAuctions.length} enchère(s) · ${label}`;
+    }
+
+    function labelFromStatus(s){ if(s==='open') return 'Ouvertes'; if(s==='upcoming') return 'À venir'; if(s==='closed') return 'Closes'; return 'Tout'; }
+
+    function renderAuctions(){
+      elTbody.innerHTML = '';
+      if(!currentAuctions.length){
+        const tr = document.createElement('tr'); const td = document.createElement('td');
+        td.colSpan = 5; td.className = 'muted'; td.textContent = 'Aucune enchère.'; tr.appendChild(td); elTbody.appendChild(tr); return;
+      }
+      for(const a of currentAuctions){
+        const tr = document.createElement('tr');
+
+        const tdA = document.createElement('td');
+        const title = a.title || a.name || 'Sans titre';
+        const id = a.id || a.auctionId || '—';
+        tdA.innerHTML = `<div style="display:flex; flex-direction:column; gap:4px">
+          <div style="font-weight:600">${escapeHtml(title)}</div>
+          <div class="muted mono" style="font-size:12px">${id}</div>
+        </div>`;
+
+        const tdSector = document.createElement('td'); tdSector.textContent = a.sector || '—';
+
+        const tdS = document.createElement('td'); const st = a.status || 'open'; tdS.innerHTML = statusBadge(st);
+
+        const tdB = document.createElement('td');
+        let best = a.bestBid ?? a.maxBid ?? a.topBid ?? null;
+        if(best && typeof best === 'object'){ best = best.amount ?? null; }
+        tdB.textContent = best!=null ? euros(Number(best)) : '—';
+
+        const tdAct = document.createElement('td'); tdAct.style.textAlign='right';
+        const btnView = document.createElement('button'); btnView.textContent='Voir bids'; btnView.addEventListener('click', ()=> openBids(id, title));
+        const btnDel = document.createElement('button'); btnDel.className='danger'; btnDel.textContent='Supprimer'; btnDel.addEventListener('click', ()=> deleteAuction(id, title));
+        tdAct.append(btnView, btnDel);
+
+        tr.append(tdA, tdSector, tdS, tdB, tdAct);
+        elTbody.appendChild(tr);
+      }
+    }
+
+    async function openBids(auctionId, title){
+      modalTitle.textContent = `Bids — ${title}`;
+      bidsTbody.innerHTML = '';
+      modalBackdrop.style.display = 'flex';
+      try{
+        const r = await fetch(new URL(`/api/bids/${encodeURIComponent(auctionId)}`, API_BASE), { headers: { 'Accept':'application/json' }});
+        if(!r.ok){ const tx = await r.text().catch(()=> ''); throw new Error(`GET /api/bids/${auctionId} → ${r.status} ${tx}`); }
+        const data = await r.json();
+        const bids = Array.isArray(data) ? data : (Array.isArray(data.bids) ? data.bids : []);
+        if(!bids.length){ const tr=document.createElement('tr'); const td=document.createElement('td'); td.colSpan=3; td.className='muted'; td.textContent='Aucun bid.'; tr.appendChild(td); bidsTbody.appendChild(tr); return; }
+        let max = -Infinity; for(const b of bids){ if(typeof b.amount==='number' && b.amount>max) max=b.amount; }
+        for(const b of bids){
+          const tr=document.createElement('tr'); if(b.amount===max) tr.classList.add('best');
+          const tdBidder=document.createElement('td'); tdBidder.textContent=b.bidder||'—';
+          const tdAmt=document.createElement('td'); tdAmt.innerHTML=euros(Number(b.amount)) + (b.amount===max ? ' <span class="badge best-badge">Meilleur</span>' : '');
+          const tdDate=document.createElement('td'); tdDate.textContent=b.createdAt ? fmtDate(b.createdAt) : '—';
+          tr.append(tdBidder, tdAmt, tdDate); bidsTbody.appendChild(tr);
+        }
+      }catch(err){ console.error(err); bidsTbody.innerHTML = `<tr><td colspan="3" class="muted">Erreur de chargement des bids.</td></tr>`; }
+    }
+
+    function fmtDate(iso){ try{ const d = new Date(iso); return new Intl.DateTimeFormat('fr-FR',{ dateStyle:'medium', timeStyle:'short'}).format(d); }catch{ return iso } }
+
+    async function deleteAuction(auctionId, title){
+      const token = loadToken(); if(!token){ alert('Veuillez coller/enregistrer un token admin.'); return; }
+      if(!confirm(`Supprimer l’enchère « ${title} » ?`)) return;
+      const doDelete = async (force=false)=>{ const url=new URL(`/api/auctions/${encodeURIComponent(auctionId)}`, API_BASE); if(force) url.searchParams.set('force','true'); return fetch(url.toString(),{ method:'DELETE', headers:{ 'Authorization': `Bearer ${token}`, 'Accept':'application/json' }}); };
+      let r = await doDelete(false);
+      if(r.status===409){
+        const tx = await r.text().catch(()=> '');
+        if(confirm('Cette enchère a des bids. Forcer la suppression et purger les bids ?')){
+          r = await doDelete(true);
+          if(r.ok){ const json = await r.json().catch(()=> ({})); const purged = Array.isArray(json.purgedBids) ? json.purgedBids.length : (json.purgedCount ?? 0); alert(`Supprimée. Bids purgés : ${purged}.`); }
+        }else{ return; }
+      }else if(!r.ok){ const tx = await r.text().catch(()=> ''); alert(`Échec suppression (${r.status}). ${tx}`); return; }
+      toast('Enchère supprimée.'); await fetchAuctions();
+    }
+
+    function toIsoOrNull(v){ if(!v) return null; try{ const d=new Date(v); if(isNaN(d.getTime())) return null; return d.toISOString(); }catch{ return null; } }
+
+    async function createAuction(){
+      const token = loadToken(); if(!token){ alert('Veuillez coller/enregistrer un token admin.'); return; }
+      const title=(elNewTitle.value||'').trim(), sector=(elNewSector.value||'').trim(), s=(elNewStart.value||'').trim(), e=(elNewEnd.value||'').trim();
+      if(!title){ alert('Titre requis.'); return; } if(!sector){ alert('Secteur requis.'); return; } if(!s||!e){ alert('Dates début et fin requises.'); return; }
+      const startsAt=toIsoOrNull(s), endsAt=toIsoOrNull(e); if(!startsAt||!endsAt){ alert('Format de date invalide.'); return; }
+      const body = { title, sector, startsAt, endsAt };
+      try{
+        const r = await fetch(new URL('/api/auctions', API_BASE).toString(), { method:'POST', headers:{ 'Content-Type':'application/json', 'Accept':'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(body) });
+        const text = await r.text();
+        if(!r.ok){ alert(`Échec création (${r.status}).\n${text || '(aucun détail retourné)'}`); return; }
+        elNewTitle.value=''; elNewSector.value=''; elNewStart.value=''; elNewEnd.value='';
+        toast('Enchère créée.'); await fetchAuctions();
+      }catch(err){ console.error(err); alert('Erreur réseau lors de la création.'); }
+    }
+
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
+
+    window.addEventListener('DOMContentLoaded', ()=>{
+      loadToken();
+      const url = new URL(location.href); const initial = url.searchParams.get('status') || '';
+      if(['','open','upcoming','closed'].includes(initial)) elStatus.value = initial;
+      fetchAuctions().catch(()=>{});
+      elSave.addEventListener('click', saveToken); elClear.addEventListener('click', clearToken); elReload.addEventListener('click', ()=> fetchAuctions().catch(()=>{}));
+      elStatus.addEventListener('change', ()=>{ const u=new URL(location.href); if(elStatus.value) u.searchParams.set('status', elStatus.value); else u.searchParams.delete('status'); history.replaceState(null,'',u.toString()); fetchAuctions().catch(()=>{}); });
+      elCreate.addEventListener('click', ()=> createAuction().catch(()=>{}));
+      btnCloseModal.addEventListener('click', ()=> modalBackdrop.style.display='none');
+      document.querySelector('#modalBackdrop').addEventListener('click', (e)=>{ if(e.target===modalBackdrop) modalBackdrop.style.display='none'; });
+    });
+  </script>
+</body>
+</html>

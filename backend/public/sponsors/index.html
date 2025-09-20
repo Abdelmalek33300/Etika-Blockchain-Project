@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Étika — Sponsors · Poser un bid</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; background:#fafafa; color:#111; }
+    .card { background:#fff; border:1px solid #e7e7e7; border-radius:14px; padding:16px; max-width:720px; margin:auto; box-shadow:0 4px 10px rgba(0,0,0,.04); }
+    h1 { margin:0 0 12px; font-size:22px; }
+    label { display:block; margin:10px 0 6px; font-size:13px; color:#333; }
+    input, select { width:100%; padding:10px; border:1px solid #ddd; border-radius:10px; font:inherit; background:#fff; }
+    button { margin-top:14px; padding:10px 14px; border:1px solid #ccc; border-radius:10px; background:#f6f6f6; cursor:pointer; }
+    button[disabled] { opacity:.5; cursor:not-allowed; }
+    button:hover { background:#efefef; }
+    .row { display:flex; gap:10px; align-items:center; }
+    .row > * { flex:1 1 auto; }
+    .muted { color:#666; font-size:12px; }
+    table { width:100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { padding:10px; border-bottom:1px solid #eee; text-align:left; }
+    .ok { color:#0a8; }
+    .err { color:#c00; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Étika — Sponsors · Poser un bid</h1>
+
+    <label for="auctionSelect">Enchère</label>
+    <select id="auctionSelect"><option>Chargement…</option></select>
+    <div id="msg" class="muted" style="margin-top:8px"></div>
+
+    <div class="row" style="margin-top:8px">
+      <div>
+        <label for="bidder">Société</label>
+        <input id="bidder" placeholder="Ex: ACME Corp" />
+      </div>
+      <div>
+        <label for="amount">Montant (€)</label>
+        <input id="amount" type="number" step="0.01" placeholder="Ex: 2500" />
+      </div>
+    </div>
+
+    <div id="hint" class="muted" style="margin-top:6px"></div>
+
+    <div class="row" style="margin-top:8px">
+      <button id="btnSend" disabled>Envoyer mon bid</button>
+      <button id="btnRefresh">Actualiser les bids</button>
+    </div>
+
+    <table>
+      <thead><tr><th>Société</th><th>Montant</th><th>Date</th></tr></thead>
+      <tbody id="bidsTbody"><tr><td colspan="3" class="muted">Aucun bid</td></tr></tbody>
+    </table>
+  </div>
+
+  <script>
+    (function () {
+      var BASE = 'https://localhost:4433/api';
+      var MIN_INCREMENT_EUR = 100;
+
+      var sel = document.getElementById('auctionSelect');
+      var msg = document.getElementById('msg');
+      var hint = document.getElementById('hint');
+      var out = document.getElementById('bidsTbody');
+      var btnSend = document.getElementById('btnSend');
+      var btnRefresh = document.getElementById('btnRefresh');
+      var amountEl = document.getElementById('amount');
+      var bidderEl = document.getElementById('bidder');
+
+      var best = 0;        // meilleur bid courant
+      var required = 0;    // montant minimal requis (= best + MIN_INCREMENT_EUR)
+
+      function esc(s){ return String(s==null?'':s)
+        .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+        .replaceAll('"','&quot;').replaceAll("'","&#39;"); }
+      function fmtAmount(v){
+        var n = Number(v); return isFinite(n)
+          ? new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(n) : '—';
+      }
+      function setInfo(text, ok){ msg.innerHTML = ok ? '<span class="ok">'+esc(text)+'</span>' : '<span class="muted">'+esc(text)+'</span>'; }
+      function setError(text){ msg.innerHTML = '<span class="err">'+esc(text)+'</span>'; }
+
+      function updateHint() {
+        if (best > 0) {
+          required = best + MIN_INCREMENT_EUR;
+          hint.textContent = 'Meilleur bid : ' + fmtAmount(best) +
+            ' — pas minimum : ' + fmtAmount(MIN_INCREMENT_EUR) +
+            ' → proposez au moins ' + fmtAmount(required) + '.';
+        } else {
+          required = 0;
+          hint.textContent = 'Premier bid libre : toute valeur strictement positive est acceptée.';
+        }
+        validate();
+      }
+
+      function validate() {
+        var a = Number(amountEl.value);
+        var nameOk = bidderEl.value.trim().length > 0;
+        var amtOk = best > 0 ? (a >= required) : (a > 0);
+        btnSend.disabled = !(nameOk && amtOk);
+      }
+
+      function loadAuctions() {
+        sel.innerHTML = '<option value="">Chargement…</option>';
+        setInfo('Chargement des enchères…');
+        fetch(BASE + '/auctions', { cache: 'no-store' })
+          .then(function(r){ return r.text().then(function(t){ return { status:r.status, body:t }; }); })
+          .then(function(res){
+            if (res.status >= 400) throw new Error('HTTP '+res.status);
+            var data = res.body ? JSON.parse(res.body) : {};
+            var items = Array.isArray(data.items) ? data.items : [];
+            if (!items.length) { sel.innerHTML = '<option value="">Aucune enchère</option>'; setInfo('Aucune enchère.'); return; }
+            sel.innerHTML = items.map(function(a){ return '<option value="'+esc(a.id)+'">'+esc(a.title)+' — '+esc(a.sector||'')+'</option>'; }).join('');
+            setInfo('Enchères chargées ✅', true);
+            refreshBids();
+          })
+          .catch(function(e){ setError('Erreur: '+(e && e.message ? e.message : e)); });
+      }
+
+      function refreshBids() {
+        var id = sel.value;
+        if (!id) { out.innerHTML = '<tr><td colspan="3" class="muted">Choisissez une enchère.</td></tr>'; best = 0; updateHint(); return; }
+        fetch(BASE + '/bids/' + id, { cache:'no-store' })
+          .then(function(r){ return r.json(); })
+          .then(function(data){
+            var rows = Array.isArray(data.bids) ? data.bids : [];
+            if (!rows.length) {
+              out.innerHTML = '<tr><td colspan="3" class="muted">Aucun bid</td></tr>';
+              best = 0;
+              updateHint();
+              return;
+            }
+            out.innerHTML = rows.map(function(b){
+              var d = b.createdAt ? new Date(b.createdAt).toLocaleString('fr-FR') : '—';
+              return '<tr><td>'+esc(b.bidder||'—')+'</td><td>'+fmtAmount(b.amount)+'</td><td>'+esc(d)+'</td></tr>';
+            }).join('');
+            // calcule best
+            best = rows.reduce(function(m, b){ var v = Number(b.amount); return (isFinite(v) && v>m) ? v : m; }, 0);
+            updateHint();
+          })
+          .catch(function(){ out.innerHTML = '<tr><td colspan="3" class="err">Erreur de chargement</td></tr>'; best = 0; updateHint(); });
+      }
+
+      function sendBid() {
+        var auctionId = sel.value;
+        var bidder = bidderEl.value.trim();
+        var amount = Number(amountEl.value);
+        if (!auctionId) return setError('Choisissez une enchère.');
+
+        setInfo('Envoi en cours…');
+        fetch(BASE + '/bids', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ auctionId: auctionId, bidder: bidder, amount: amount })
+        })
+        .then(function(r){ return r.text().then(function(t){ return { status:r.status, body:t }; }); })
+        .then(function(res){
+          var obj = {};
+          try { obj = res.body ? JSON.parse(res.body) : {}; } catch(_) {}
+          if (res.status >= 400) {
+            // message explicite avec pas minimum
+            var highest = Number(obj.highest);
+            var inc     = Number(obj.minIncrement ?? MIN_INCREMENT_EUR);
+            var req     = Number.isFinite(obj.required) ? Number(obj.required)
+                        : (Number.isFinite(highest) ? highest + inc : NaN);
+            if (Number.isFinite(req)) {
+              best = highest; // maj de best si renvoyé
+              MIN_INCREMENT_EUR = inc; // au cas où on change côté backend
+              updateHint();
+              return setError('Montant insuffisant : pas minimum de ' + fmtAmount(inc) +
+                              ' au-dessus du meilleur bid (' + fmtAmount(highest) +
+                              '). Proposez au moins ' + fmtAmount(req) + '.');
+            }
+            return setError(obj && obj.error ? obj.error : (res.body || ('HTTP '+res.status)));
+          }
+          setInfo('Bid enregistré ✅', true);
+          bidderEl.value = '';
+          amountEl.value = '';
+          refreshBids();
+          validate();
+        })
+        .catch(function(e){ setError('Erreur: '+(e && e.message ? e.message : e)); });
+      }
+
+      sel.addEventListener('change', refreshBids);
+      btnSend.addEventListener('click', sendBid);
+      btnRefresh.addEventListener('click', refreshBids);
+      amountEl.addEventListener('input', validate);
+      bidderEl.addEventListener('input', validate);
+
+      loadAuctions();
+    })();
+  </script>
+</body>
+</html>

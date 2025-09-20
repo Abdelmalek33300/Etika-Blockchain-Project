@@ -1,0 +1,71 @@
+{
+  "74efde8d-39d8-4403-8d64-d65285e0d3bf": [
+    {
+      "auctionId": "74efde8d-39d8-4403-8d64-d65285e0d3bf",
+      "id": "15aaac15-2130-47ab-951a-be99dcee19e8",
+      "amount": 2000,
+      "bidder": "ACME Corp",
+      "createdAt": "2025-09-08T13:10:50.292Z"
+    }
+  ],
+  "2c3f2d53-5702-4691-9179-89eb47e0ed54": [
+    {
+      "auctionId": "2c3f2d53-5702-4691-9179-89eb47e0ed54",
+      "id": "7560cd1c-ae59-456f-afea-13c296c786b9",
+      "amount": 2050,
+      "bidder": "TOTO télécom",
+      "createdAt": "2025-09-08T13:11:26.931Z"
+    },
+    {
+      "auctionId": "2c3f2d53-5702-4691-9179-89eb47e0ed54",
+      "id": "f950aaef-a877-4a48-b991-950833931cca",
+      "amount": 2200,
+      "bidder": "JOJO TEL",
+      "createdAt": "2025-09-08T13:12:15.286Z"
+    },
+    {
+      "auctionId": "2c3f2d53-5702-4691-9179-89eb47e0ed54",
+      "id": "cc6d7043-3fc5-4e36-bdfd-e45918ab711c",
+      "amount": 22050,
+      "bidder": "JUJU TELECOM",
+      "createdAt": "2025-09-08T13:13:01.405Z"
+    },
+    {
+      "auctionId": "2c3f2d53-5702-4691-9179-89eb47e0ed54",
+      "id": "3bd7334b-adf2-4198-ac0d-c93af0e98d1b",
+      "amount": 22150,
+      "bidder": "FOUFOU TELECOM",
+      "createdAt": "2025-09-08T13:13:36.565Z"
+    },
+    {
+      "auctionId": "2c3f2d53-5702-4691-9179-89eb47e0ed54",
+      "id": "9a235133-e232-454a-b221-e6394df57bd7",
+      "amount": 22250,
+      "bidder": "ACME Corp",
+      "createdAt": "2025-09-08T13:22:05.113Z"
+    }
+  ],
+  "976b4adb-2c8a-4a04-b439-830ef7c4c15d": [
+    {
+      "auctionId": "976b4adb-2c8a-4a04-b439-830ef7c4c15d",
+      "id": "854867de-50d1-4bc8-814f-8efdb6c6ed8a",
+      "amount": 500,
+      "bidder": "test corp",
+      "createdAt": "2025-09-09T17:11:40.492Z"
+    },
+    {
+      "auctionId": "976b4adb-2c8a-4a04-b439-830ef7c4c15d",
+      "id": "2aca7b5c-a95d-491b-9b5f-9cc3b285024e",
+      "amount": 60000,
+      "bidder": "fifi télécom",
+      "createdAt": "2025-09-10T11:36:32.340Z"
+    },
+    {
+      "auctionId": "976b4adb-2c8a-4a04-b439-830ef7c4c15d",
+      "id": "7839a789-5035-4e9a-8b93-caedf6a2d8b5",
+      "amount": 560000,
+      "bidder": "barjo télécom",
+      "createdAt": "2025-09-10T11:37:02.730Z"
+    }
+  ]
+}

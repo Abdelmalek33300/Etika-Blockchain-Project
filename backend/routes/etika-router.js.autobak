@@ -1,0 +1,101 @@
+// routes/etika-router.js ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ESM
+// Routeur principal /api : health, publics (PG), alias bids, admin, counters (seuil)
+
+import express from 'express';
+import pkg from 'pg';
+import pgRouter from './pg-router.mjs';
+import auctionsBidsAlias from './auctions-bids-alias.js';
+import auctionsAdminRouter from './auctions-admin-router.js';
+import authRouter from './auth.js'; // login/rate-limit existants
+
+const { Pool } = pkg;
+import auctionsPg from './auctions-pg.mjs';
+const router = express.Router();
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: false } : false,
+});
+
+// Health (simple, JSON)
+router.get('/health', (req, res) => {
+  return res.json({ ok: true, env: process.env.NODE_ENV || 'development' });
+});
+
+/**
+ * Public counters: GET /api/public/counters
+ * - threshold: LAUNCH_THRESHOLD (env, dÃƒÆ’Ã‚Â©faut 100000)
+ * - total_badges: 0 si table badges absente, sinon COUNT(*) actifs
+ * - percent: min(100, floor(total/threshold*100))
+ * - per_sector: [] si colonne sector absente
+ */
+router.get('/public/counters', (req,res,next)=> next());
+
+    if (!hasBadges.rows[0]?.exists) {
+      return res.json({
+        threshold: THRESHOLD,
+        total_badges: 0,
+        percent: 0,
+        per_sector: [],
+      });
+    }
+
+    // Total badges actifs (ou statut NULL considÃƒÆ’Ã‚Â©rÃƒÆ’Ã‚Â© actif)
+    const totalQ = await pool.query(
+      `SELECT COUNT(*)::int AS n
+         FROM badges
+        WHERE COALESCE(status,'active') = 'active'`
+    );
+    const total = totalQ.rows[0]?.n ?? 0;
+
+    // Colonne sector existe ?
+    const hasSector = await pool.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+         WHERE table_schema='public'
+           AND table_name='badges'
+           AND column_name='sector'
+       ) AS exists`
+    );
+
+    let per_sector = [];
+    if (hasSector.rows[0]?.exists) {
+      const perQ = await pool.query(
+        `SELECT COALESCE(sector,'unknown') AS sector, COUNT(*)::int AS n
+           FROM badges
+          WHERE COALESCE(status,'active')='active'
+          GROUP BY 1
+          ORDER BY n DESC`
+      );
+      per_sector = perQ.rows;
+    }
+
+    const percent = THRESHOLD > 0 ? Math.min(100, Math.floor((total * 100) / THRESHOLD)) : 0;
+
+    return res.json({
+      threshold: THRESHOLD,
+      total_badges: total,
+      percent,
+      per_sector,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Endpoints publics (PostgreSQL): /api/auctions, /api/bids/:auctionId
+router.use('/', pgRouter);
+
+// Alias public: /api/auctions/:id/bids
+
+// Public: /api/auctions (PostgreSQL)
+router.use('/auctions', auctionsPg);
+router.use('/auctions', auctionsBidsAlias);
+
+// Auth (si utilisÃƒÆ’Ã‚Â© par tes scripts DB)
+router.use('/auth', authRouter);
+
+// Admin: /api/admin/auctions (GET liste, POST crÃƒÆ’Ã‚Â©er, PATCH :id/archive, DELETE :id)
+router.use('/admin/auctions', auctionsAdminRouter);
+
+export default router;

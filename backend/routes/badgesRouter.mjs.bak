@@ -1,0 +1,127 @@
+// backend/routes/badgesRouter.mjs
+// Étika — Endpoints badges (version sûre sans DB, pour intégration UI immédiate)
+// - POST /api/badges/request : enregistre une demande en NDJSON dans backend/.cache
+// - POST /api/badges/verify  : enregistre une décision de vérification en NDJSON
+//
+// Objectif : permettre au frontend de brancher les formulaires dès maintenant,
+// sans dépendre d'une base Postgres fonctionnelle. Quand DATABASE_URL sera OK,
+// on pourra remplacer l’append fichier par des INSERT PG, sans changer l’API.
+//
+// Sécurité : rate-limit global déjà en place via server.js ; ici on valide les inputs.
+
+import express from "express";
+import { promises as fs } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { body, validationResult } from "express-validator";
+import crypto from "crypto";
+
+const router = express.Router();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Dossier .cache (dans backend/)
+const cacheDir = path.resolve(__dirname, "../.cache");
+const requestsLog = path.join(cacheDir, "badge-requests.ndjson");
+const verifsLog   = path.join(cacheDir, "badge-verifications.ndjson");
+
+// Petite aide pour s’assurer que backend/.cache existe
+async function ensureCacheDir() {
+  await fs.mkdir(cacheDir, { recursive: true });
+}
+
+// Liste indicative des secteurs déjà présents dans le dashboard (adapter au besoin)
+const SECTORS = new Set([
+  "bank", "energy", "mobile", "telecom", "search_engine", "vod",
+  "payment_card", "mutual", "insurance", "box_internet"
+]);
+
+// Middlewares de validation
+const requestValidators = [
+  body("email").isEmail().withMessage("email invalide"),
+  body("sector").isString().custom(v => SECTORS.has(v))
+    .withMessage("sector inconnu"),
+  body("note").optional().isString().isLength({ max: 500 })
+    .withMessage("note trop longue (max 500)"),
+  body("evidence_url").optional().isURL({ require_protocol: true })
+    .withMessage("evidence_url doit être une URL absolue"),
+];
+
+const verifyValidators = [
+  body("request_id").isString().isLength({ min: 8 })
+    .withMessage("request_id invalide"),
+  body("approved").isBoolean().withMessage("approved doit être booléen"),
+  body("verifier").isString().isLength({ min: 2, max: 120 })
+    .withMessage("verifier requis"),
+  body("comment").optional().isString().isLength({ max: 500 })
+    .withMessage("comment trop long (max 500)"),
+];
+
+// Endpoint: créer une demande de badge (ACCEPTED 202)
+router.post("/api/badges/request", requestValidators, async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ ok: false, errors: errors.array() });
+  }
+
+  try {
+    await ensureCacheDir();
+
+    const nowIso = new Date().toISOString();
+    const request_id = crypto.randomUUID();
+
+    const record = {
+      type: "badge_request",
+      request_id,
+      at: nowIso,
+      ip: req.ip,
+      ua: req.get("user-agent") || "",
+      email: String(req.body.email).toLowerCase(),
+      sector: req.body.sector,
+      note: req.body.note ?? "",
+      evidence_url: req.body.evidence_url ?? "",
+    };
+
+    await fs.appendFile(requestsLog, JSON.stringify(record) + "\n", "utf8");
+
+    // Réponse 202 = reçu pour traitement (même logique que plus tard avec files/queues)
+    return res.status(202).json({ ok: true, request_id });
+  } catch (err) {
+    console.error("[/api/badges/request] ERROR", err);
+    return res.status(500).json({ ok: false, error: "write_failed" });
+  }
+});
+
+// Endpoint: décision de vérification (ACCEPTED 202)
+router.post("/api/badges/verify", verifyValidators, async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ ok: false, errors: errors.array() });
+  }
+
+  try {
+    await ensureCacheDir();
+
+    const nowIso = new Date().toISOString();
+    const record = {
+      type: "badge_verification",
+      at: nowIso,
+      ip: req.ip,
+      ua: req.get("user-agent") || "",
+      request_id: req.body.request_id,
+      approved: req.body.approved,
+      verifier: req.body.verifier,
+      comment: req.body.comment ?? "",
+    };
+
+    await fs.appendFile(verifsLog, JSON.stringify(record) + "\n", "utf8");
+
+    // Ici on pourrait déclencher la maj du cache/dashboard plus tard (pipeline)
+    return res.status(202).json({ ok: true });
+  } catch (err) {
+    console.error("[/api/badges/verify] ERROR", err);
+    return res.status(500).json({ ok: false, error: "write_failed" });
+  }
+});
+
+export default router;
