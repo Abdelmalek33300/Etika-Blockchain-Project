@@ -1,0 +1,140 @@
+﻿// frontend/src/App.jsx (onglets + UI peaufinée)
+import { useEffect, useState } from "react";
+import BadgesPanel from "./components/BadgesPanel.jsx";
+import AuctionsPanel from "./components/AuctionsPanel.jsx";
+
+export default function App() {
+  const [boot, setBoot] = useState({ ok: false, error: null });
+  const [tab, setTab] = useState(() => localStorage.getItem("tab") || "badges");
+
+  useEffect(() => {
+    let abort = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/public/dashboard", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!abort) setBoot({ ok: true, error: null, data: json });
+      } catch (e) {
+        if (!abort) setBoot({ ok: false, error: e.message || String(e) });
+      }
+    })();
+    return () => { abort = true; };
+  }, []);
+
+  function selectTab(next) {
+    setTab(next);
+    localStorage.setItem("tab", next);
+  }
+
+  const page = {
+    minHeight: "100vh",
+    background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    color: "#0f172a",
+  };
+
+  const container = {
+    maxWidth: 1100,
+    margin: "32px auto",
+    padding: "0 16px",
+  };
+
+  const card = {
+    border: "1px solid #e5e7eb",
+    background: "#fff",
+    borderRadius: 16,
+    boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+    padding: 16,
+  };
+
+  const title = { margin: 0, fontSize: 28, letterSpacing: "-0.02em" };
+  const subtitle = { color: "#64748b", fontSize: 13, marginTop: 6 };
+
+  // Segmented control
+  const tabsWrap = {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    background: "#f3f4f6",
+    padding: 6,
+    borderRadius: 12,
+    border: "1px solid #e5e7eb",
+  };
+  const tabBtnBase = {
+    padding: "8px 14px",
+    borderRadius: 10,
+    border: "1px solid transparent",
+    cursor: "pointer",
+    fontSize: 14,
+    background: "transparent",
+    color: "#0f172a",
+    transition: "all .15s ease",
+    outline: "none",
+  };
+  const tabBtnActive = {
+    background: "#fff",
+    borderColor: "#e5e7eb",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+  };
+  const tabBtnHover = { background: "#e5e7eb" };
+
+  const btn = (active) => ({
+    ...tabBtnBase,
+    ...(active ? tabBtnActive : {}),
+  });
+
+  return (
+    <div style={page}>
+      <div style={container}>
+        <header style={{ marginBottom: 16 }}>
+          <h1 style={title}>Étika  Dashboard public</h1>
+          <div style={subtitle}>
+            Backend&nbsp;: <code>https://localhost:4443</code>  Frontend&nbsp;: <code>http://localhost:5173</code>
+          </div>
+          {!boot.ok && (
+            <div style={{ marginTop: 8, fontSize: 13, color: "#b91c1c" }}>
+              {boot.error ? `Chargement initial : ${boot.error}` : "Chargement initial..."}
+            </div>
+          )}
+        </header>
+
+        <section style={card}>
+          {/* Onglets */}
+          <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={tabsWrap}>
+              <button
+                onClick={() => selectTab("badges")}
+                style={btn(tab === "badges")}
+                onMouseEnter={(e) => ! (tab === "badges") && Object.assign(e.currentTarget.style, tabBtnHover)}
+                onMouseLeave={(e) => ! (tab === "badges") && Object.assign(e.currentTarget.style, { background: "transparent" })}
+                title="Voir les badges"
+              >
+                Participants (badges pré-token)
+              </button>
+              <button
+                onClick={() => selectTab("auctions")}
+                style={btn(tab === "auctions")}
+                onMouseEnter={(e) => ! (tab === "auctions") && Object.assign(e.currentTarget.style, tabBtnHover)}
+                onMouseLeave={(e) => ! (tab === "auctions") && Object.assign(e.currentTarget.style, { background: "transparent" })}
+                title="Voir les enchères"
+              >
+                Enchères
+              </button>
+            </div>
+          </nav>
+
+          {/* Contenu */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
+            {tab === "badges" ? <BadgesPanel /> : <AuctionsPanel />}
+          </div>
+        </section>
+
+        <section style={{ marginTop: 12, fontSize: 12, color: "#94a3b8" }}>
+          <em>Astuce :</em> l&apos;onglet choisi est mémorisé pour votre prochaine visite.
+        </section>
+      </div>
+    </div>
+  );
+}
+

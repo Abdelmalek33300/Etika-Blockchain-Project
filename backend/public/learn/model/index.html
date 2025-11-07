@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Étika — Modèle Économique</title>
+  <meta name="description" content="Notre Modèle Économique : un circuit court auto-alimenté." />
+  <link rel="icon" href="/favicon.ico" />
+
+  <style>
+    :root{
+      --ink:#0f172a; --muted:#475569; --line:#e8eef6; --blue:#0b61ff; --bg:#ffffff;
+      --radius:12px; --container:1080px;
+      /* Typo commune (Overview / Values) */
+      --fs-kicker:12px;
+      --fs-sub:18px;
+      --fs-h1-min:26px; --fs-h1-max:42px; --fs-h1-vw:4.5vw;
+      --fs-h2-min:20px; --fs-h2-max:32px; --fs-h2-vw:2.8vw;
+      --lh-body:1.55; --lh-title:1.15; --lh-h2:1.25;
+      --space-xxs:6px; --space-xs:8px; --space-sm:10px; --space-md:16px; --space-lg:24px; --space-xl:36px; --space-2xl:48px;
+      --shadow:0 6px 18px rgba(2,6,23,.04); --zebra:#f9fafb;
+    }
+
+    /* BASE (identique Overview/Values) */
+    html, body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,sans-serif;
+      -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+      font-kerning:normal; font-variant-ligatures:common-ligatures contextual;
+      letter-spacing:normal; word-spacing:normal;
+      line-height:var(--lh-body);
+    }
+    a{color:inherit; text-decoration:none;}
+    strong{font-weight:600;}
+
+    /* NAV (harmonisée) */
+    .nav{
+      position:sticky; top:0; z-index:9999; background:#fff;
+      border-bottom:1px solid rgba(2,6,23,.08);
+      box-shadow:0 6px 20px rgba(2,6,23,.06);
+    }
+    .nav-inner{
+      max-width:1180px; margin:0 auto; padding:10px 16px;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .brand{font-weight:800; font-size:20px; color:var(--ink);}
+    .burger{
+      width:40px; height:36px; background:transparent; border:0;
+      display:flex; flex-direction:column; gap:6px; justify-content:center;
+    }
+    .burger span{height:2px; background:var(--blue); transition:transform .18s ease,opacity .18s ease;}
+    .burger.is-open span:nth-child(1){transform:translateY(8px) rotate(45deg);}
+    .burger.is-open span:nth-child(2){opacity:0;}
+    .burger.is-open span:nth-child(3){transform:translateY(-8px) rotate(-45deg);}
+    .menu{display:none; gap:18px; align-items:center;}
+    .menu a{font-weight:700; font-size:15px; padding:10px 12px; border-radius:10px;}
+    .menu a:hover{background:#0b61ff10; color:var(--blue);}
+    @media(min-width:980px){ .burger{display:none;} .menu{display:flex;} }
+    .menu-open{
+      display:flex; flex-direction:column; position:absolute; left:0; right:0; top:58px;
+      padding:10px 16px 14px; background:#fff;
+      border-bottom:1px solid rgba(2,6,23,.08); box-shadow:0 14px 28px rgba(2,6,23,.08);
+    }
+
+    /* CONTENU */
+    .wrap{ max-width:var(--container); margin:0 auto; padding:24px 16px 60px; }
+    .kicker{font-size:var(--fs-kicker); letter-spacing:.05em; text-transform:uppercase; color:#6b7280; margin:0 0 var(--space-xxs); font-weight:700;}
+
+    /* HERO */
+    .hero{ padding:24px 0 12px; border-bottom:1px solid #f1f5f9; display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
+    h1{
+      margin:10px 0 var(--space-xs);
+      font-size:clamp(var(--fs-h1-min), var(--fs-h1-vw), var(--fs-h1-max));
+      line-height:var(--lh-title); font-weight:800;
+      letter-spacing:normal; word-spacing:normal;
+      text-wrap:balance;           /* équilibre les retours à la ligne */
+      word-break:keep-all;         /* évite les coupures disgracieuses */
+      text-align:left;             /* anti "gruyère" */
+    }
+    .with-blue-underline::after{
+      content:""; display:block; height:3px; margin-top:var(--space-xxs); width:clamp(140px,26%,260px); border-radius:2px;
+      background:linear-gradient(90deg,var(--blue)0%,rgba(11,97,255,.65)55%,rgba(11,97,255,0)100%);
+    }
+
+    /* Accroche à GAUCHE sous le H1 */
+    .accroche-left{
+      margin:0; padding:10px 12px; background:#f8fafc; color:var(--blue);
+      border-radius:10px; font-weight:600; font-size:15px; line-height:1.35; text-align:left;
+      box-shadow:var(--shadow); max-width:720px;
+      letter-spacing:normal; word-spacing:normal;
+    }
+    .accroche-left .l{ display:block; }
+    .accroche-left .l1{ white-space:normal; }
+
+    @media (max-width: 768px){
+      .hero{ flex-direction:column; align-items:flex-start; }
+    }
+
+    /* TITRES / SOULIGNÉS */
+    h2{
+      margin:0 0 var(--space-xs);
+      font-size:clamp(var(--fs-h2-min), var(--fs-h2-vw), var(--fs-h2-max));
+      line-height:var(--lh-h2); position:relative; font-weight:700; color:var(--ink);
+      letter-spacing:normal; word-spacing:normal;
+      text-wrap:balance; word-break:keep-all;
+      text-align:left; /* anti "gruyère" */
+    }
+    h2.with-blue-underline::after{
+      content:""; display:block; height:3px; margin-top:var(--space-xxs); width:clamp(140px,26%,260px); border-radius:2px;
+      background:linear-gradient(90deg,var(--blue)0%,rgba(11,97,255,.65)55%,rgba(11,97,255,0)100%);
+    }
+    h3{
+      margin:18px 0 8px; font-size:var(--fs-sub); font-weight:700; color:var(--ink);
+      letter-spacing:normal; word-spacing:normal; text-align:left; /* anti "gruyère" */
+    }
+
+    /* TEXTE */
+    p{ margin:0 0 var(--space-sm); text-align:justify; }
+    .section-intro{ margin-top:6px; color:var(--muted); }
+
+    /* GRILLES (50/50 + quinconce) */
+    .grid{ display:flex; flex-direction:column; gap:16px; margin:40px 0 48px; }
+    .col{ flex:1 1 50%; }
+    .text{ text-align:justify; }
+    .media{ display:flex; align-items:flex-start; justify-content:center; }
+    .media img{
+      width:100%; max-width:560px; height:auto; object-fit:contain;
+      border-radius:14px; box-shadow:var(--shadow);
+      max-height:min(58vh,420px);
+    }
+    .media img.small{ max-width:340px; }
+    @media(min-width:992px){
+      .grid{ flex-direction:row; align-items:flex-start; gap:48px; }
+      .alt{ flex-direction:row-reverse; }
+    }
+
+    /* TABLEAU — 1re colonne sur une ligne */
+    .table-wrap{ margin-top:18px; overflow-x:auto; }
+    table{
+      width:100%; border-collapse:collapse; background:#fff;
+      border:1px solid #e5e7eb; border-radius:10px; box-shadow:var(--shadow);
+      font-size:15.5px; line-height:1.55; table-layout:auto;
+    }
+    thead th{
+      text-align:left; padding:10px 14px; background:#f1f5f9; color:#0f172a;
+      font-weight:800; border-bottom:1px solid #e2e8f0; white-space:nowrap;
+    }
+    tbody td{
+      padding:10px 14px; border-bottom:1px solid #eef2f7; vertical-align:top; text-align:left;
+    }
+    tbody tr:nth-child(odd){ background:var(--zebra); }
+    tbody tr:last-child td{ border-bottom:none; }
+    th:first-child, td:first-child{
+      width:32%; font-weight:800; color:#0b61ff; white-space:nowrap;
+    }
+    /* Repli mobile : autoriser wrap si trop étroit */
+    @media (max-width: 520px){
+      th:first-child, td:first-child{ white-space:normal; }
+      table{ font-size:15px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- NAV -->
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">Étika</a>
+      <button class="burger" aria-label="Menu" aria-expanded="false" aria-controls="main-menu" id="burgerBtn">
+        <span></span><span></span><span></span>
+      </button>
+      <nav id="main-menu" class="menu">
+        <a href="/overview">Accueil</a>
+        <a href="/auctions">Enchères</a>
+        <a href="/about">À propos</a>
+        <a href="/contact">Contact</a>
+        <a href="https://community.example.com" target="_blank" rel="noreferrer">Communauté</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="kicker">Modèle Économique</div>
+
+    <header class="hero">
+      <div class="hero-title">
+        <h1 class="with-blue-underline">
+          Notre Modèle Économique&nbsp;: un circuit court auto-alimenté
+        </h1>
+        <!-- Accroche déplacée à GAUCHE sous le H1 (contenu inchangé) -->
+        <p class="accroche-left" aria-label="Accroche">
+          <span class="l l1">Votre pouvoir décisionnaire de consommateur</span>
+          <span class="l l2">c'est votre capital financier.</span>
+        </p>
+      </div>
+    </header>
+
+    <!-- INTRO alignée sur la colonne texte de la section suivante -->
+    <section class="grid" style="margin:24px 0 28px;">
+      <div class="col text">
+        <p>Notre modèle économique repose sur un principe simple : transformer le pouvoir décisionnaire quotidien du consommateur en capital financier, tout en réinjectant cette valeur dans un circuit court auto-alimenté. Ce mécanisme se déploie en deux grandes phases.</p>
+      </div>
+      <div class="col"><!-- colonne droite vide pour alignement --></div>
+    </section>
+
+    <!-- PHASE 1 -->
+    <section class="grid">
+      <div class="col text">
+        <h2 class="with-blue-underline">1. Phase de démarrage : les Enchères Citoyennes (amorçage)</h2>
+        <p>L'objectif est de constituer le capital initial nécessaire au lancement du Fonds des Consommateurs et de sélectionner les partenaires stratégiques qui s'engagent à respecter l'éthique du projet.</p>
+
+        <h3>Les jetons primaires</h3>
+        <p>Chaque nouveau membre inscrit reçoit gratuitement un jeton numérique unique (NFT ou assimilé) par secteur d'activité mis en concurrence. Ces jetons sont la première matérialisation de sa fidélité et de son pouvoir décisionnaire multi-sectoriel.</p>
+
+        <h3>Les enchères</h3>
+        <p>Ces jetons sont mis aux enchères sur la plateforme. Les grandes entreprises candidates rivalisent en enchérissant pour devenir sponsors officiels et obtenir l’exclusivité de leur catégorie.</p>
+        <p>Les mises collectées par ces ventes constituent le capital de lancement du Fonds des Consommateurs.</p>
+
+        <p><strong>Résultat :</strong> le consommateur monétise son engagement initial, et le Fonds est lancé grâce aux apports des sponsors qui s'engagent par contrat.</p>
+      </div>
+      <div class="col media">
+        <img src="./phase1-encheres.png" alt="Phase 1 — Enchères Citoyennes (Amorçage)">
+      </div>
+    </section>
+
+    <!-- PHASE 2 -->
+    <section class="grid alt">
+      <div class="col text">
+        <h2 class="with-blue-underline">2. Phase de fonctionnement : la boucle du Proof of Purchase (PoP)</h2>
+        <p>Une fois le Fonds lancé, le modèle assure l'alimentation continue de l'épargne du consommateur en transformant chaque décision d'achat labellisée en valeur monétaire (<em>j’achète donc j’épargne</em>).</p>
+
+        <h3>Génération de l'épargne en temps réel</h3>
+        <p>Le consommateur membre de la communauté possède des jetons numériques latents (en attente d’activation) représentant son potentiel d'épargne et son pouvoir décisionnaire.</p>
+        <p>Le Proof of Purchase (PoP) valorise ces jetons : chaque achat labellisé chez un commerçant partenaire génère une Preuve d’Achat qui déclenche automatiquement la mise en vente des jetons latents du consommateur. L’achat de ces jetons par le partenaire provoque leur activation et leur conversion en monnaie fiduciaire, créditée sur un compte d’épargne dédié. Le jeton passe de <em>latent</em> à <em>actif</em>.</p>
+        <p><strong>Régénération du potentiel :</strong> dès que le consommateur vend ses jetons activés, il reçoit la même quantité de jetons latents pour reconstituer son stock — garantissant un potentiel d'épargne continu.</p>
+
+        <h3>Le financement circulaire et accéléré</h3>
+        <p>Les jetons activés sont achetés par le commerçant et/ou le fournisseur partenaire. En les achetant, les entreprises valident la transaction et alimentent directement votre nouvelle épargne.</p>
+        <p><em>C’est votre pouvoir de décision de consommateur (votre fidélité et votre engagement) qui crée le capital.</em></p>
+
+        <h3>Mon épargne se multiplie</h3>
+        <p><strong>1. Votre épargne devient un capital-investissement :</strong><br>
+          L’épargne que vous créez en permanence par vos achats est investie en temps réel par le Fonds des Consommateurs.
+          Pour fluidifier le réseau, le Fonds agit comme un service d’affacturage unique : il garantit la liquidité immédiate des fournisseurs (contrairement à l’affacturage classique qui finance les banques) sans contraindre les distributeurs au paiement en temps réel.
+          Cette accélération des flux permet à l’entreprise d’accéder à un financement moins onéreux et favorise la rémunération en temps réel de votre capital-investissement.
+        </p>
+
+        <p><strong>2. Votre rémunération accélérée :</strong><br>
+          Lorsqu’un achat de jetons est déclenché par un PoP, l’entreprise partenaire (A, B, C…) rémunère votre capital-investissement en versant une contribution majorée — un supplément ajouté au prix normal.
+          Cette contribution est collectée par le Fonds qui, via le Smart Contract, la répartit automatiquement et crédite aussitôt votre compte d’épargne.
+          Une partie de ce supplément sert aussi à récompenser l’ensemble des membres ayant participé au cycle, garantissant une redistribution collective, transparente et équitable.
+        </p>
+
+        <p class="section-intro"><strong>3. Une croissance continue :</strong><br>
+          Cette contribution produit des intérêts. Ceux-ci sont automatiquement réinjectés, à la vitesse du numérique, pour faire croître votre épargne en continu — de manière fluide et transparente.
+        </p>
+
+        <h3>En résumé</h3>
+        <p>Votre épargne finance les entreprises partenaires, et l’écosystème vous rémunère en retour.
+          Chaque achat labellisé nourrit un cycle vertueux de richesse partagée, où votre argent reste actif et productif.
+          Les entreprises bénéficient d’un capital plus souple et moins coûteux (risques réduits, affacturage à coût très réduit, visant la gratuité à terme).
+        </p>
+        <p>Tout est automatisé : l’algorithme et le Smart Contract assurent la traçabilité et la valorisation quasi instantanée de chaque transaction.</p>
+      </div>
+
+      <div class="col media">
+        <img src="./phase2-pop.png" alt="Phase 2 — Boucle du Proof of Purchase (PoP)">
+      </div>
+    </section>
+
+    <!-- PHASE 3 -->
+    <section class="grid">
+      <div class="col text">
+        <h2 class="with-blue-underline">3. Qui fait quoi ? (La triple validation en action)</h2>
+        <p class="section-intro">Le succès du modèle repose sur le rôle précis de chaque acteur au sein de la boucle de triple validation (PoP).</p>
+
+        <div class="table-wrap">
+          <table aria-label="Rôles et acteurs du modèle économique Étika">
+            <thead>
+              <tr>
+                <th>Acteur</th>
+                <th>Rôle dans le modèle économique</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Le Consommateur</td>
+                <td>Exerce son pouvoir et active le capital : achète des produits et services labellisés, vend ses jetons pour développer son épargne en monnaie fiduciaire.</td>
+              </tr>
+              <tr>
+                <td>Le Partenaire (Commerçant / Fournisseur)</td>
+                <td>Valide la transaction et finance l’épargne : achète les jetons du consommateur pour garantir sa fidélité et bénéficie d’un accès facilité au financement du Fonds des Consommateurs.</td>
+              </tr>
+              <tr>
+                <td>Le Fonds des Consommateurs</td>
+                <td>Contrôle, investit et pérennise : vérifie les flux, contrôle le respect des engagements et finance les entreprises qui participent activement au développement de l’épargne du consommateur, selon les valeurs éthiques de la communauté.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="section-intro">Cette articulation garantit l’intégrité du système et l’alignement des intérêts à chaque transaction.</p>
+      </div>
+
+      <div class="col media">
+        <img class="small" src="./phase3-validation.png" alt="Phase 3 — Triple Validation en Action">
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Burger (identique Overview/Values)
+    (function(){
+      const burger=document.getElementById('burgerBtn');
+      const menu=document.getElementById('main-menu');
+      if(!burger || !menu) return;
+      burger.addEventListener('click',()=>{
+        const open=burger.classList.toggle('is-open');
+        burger.setAttribute('aria-expanded',open);
+        document.body.style.overflow=open?'hidden':'';
+        document.documentElement.style.overflow=open?'hidden':'';
+        menu.classList.toggle('menu-open',open);
+      });
+      menu.addEventListener('click',e=>{
+        if(e.target.tagName==='A'){
+          burger.classList.remove('is-open');
+          burger.setAttribute('aria-expanded','false');
+          menu.classList.remove('menu-open');
+          document.body.style.overflow='';
+          document.documentElement.style.overflow='';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

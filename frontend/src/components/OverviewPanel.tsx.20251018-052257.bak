@@ -1,0 +1,370 @@
+import React from "react";
+
+// Images (intro = monetiser-caddie.png selon tes derniers choix)
+import imgIntro from "../assets/images/monetiser-caddie.png";
+import imgFonctionnement from "../assets/images/encheres.png";
+import imgMecanique from "../assets/images/mecanique-engrenages.png";
+import imgStrategie from "../assets/images/strategie-ampoule.png";
+import imgAvenir from "../assets/images/avenir-globe.png";
+
+const DOCS_BASE = (import.meta as any)?.env?.VITE_LEARN_BASE || "http://localhost:4100";
+const REGISTER_BASE = (import.meta as any)?.env?.VITE_REGISTER_BASE || window.location.origin;
+
+// Bouton “En savoir plus”
+const MoreLink: React.FC<{ href: string; children: React.ReactNode }> = ({ href, children }) => {
+  const [hover, setHover] = React.useState(false);
+  return (
+    <a
+      href={href}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{ ...styles.moreBtn, ...(hover ? styles.moreBtnHover : {}) }}
+    >
+      {children}
+    </a>
+  );
+};
+
+export default function OverviewPanel() {
+  return (
+    <>
+      {/* Reset minimal pour éviter marges/paddings globaux parasites */}
+      <style>{`body, #root { margin: 0; padding: 0; }`}</style>
+
+      {/* Conteneur centré */}
+      <div style={styles.wrapper}>
+        <main style={styles.page}>
+
+          {/* ============= Intro (image GAUCHE / texte DROITE) =============
+              ⚠️ Pas de doublon HERO ici : on laisse le titre “LE PROJET / ÉTIKA” et les 5 phrases UNIQUEMENT dans HeroTop.tsx
+              On restaure le texte explicatif long comme discuté. */}
+          <section style={styles.section}>
+            <div style={styles.row}>
+              <div style={styles.colImgLeft}>
+                {/* Image fondue légèrement dans le blanc, sans bordure */}
+                <div
+                  role="img"
+                  aria-label="Le citoyen-consommateur au centre"
+                  style={{
+                    ...styles.imgBlendBoxLeft,
+                    backgroundImage: `
+                      linear-gradient(90deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.00) 8%),
+                      url(${imgIntro})
+                    `,
+                  }}
+                />
+              </div>
+
+              <div style={styles.colTextRight}>
+                <h1 style={styles.h1}>Étika&nbsp;: monétiser le pouvoir des citoyens-consommateurs</h1>
+                <div style={styles.textBox}>
+                  <p style={styles.p}>
+                    <strong>Étika propose à chaque citoyen-consommateur de monétiser son pouvoir de décision.</strong>
+                    Combien vaut votre fidélité&nbsp;? Quelques dizaines, peut-être des centaines d’euros par mois.
+                    Ensemble, allons chercher le maximum.
+                  </p>
+                  <p style={styles.p}>
+                    Sans consommateurs, l’industrie n’est rien. Étika crée un nouvel écosystème qui transforme votre
+                    fidélité en capital, en temps réel. Nous proposons d’automatiser et de décentraliser la fonction
+                    finance, afin de récupérer les marges des intermédiaires financiers et de les réinvestir dans une
+                    nouvelle épargne citoyenne. Notre ambition&nbsp;: rémunérer la consommation et la production responsables,
+                    et construire une économie éthique, solidaire et durable — en redistribuant davantage de valeur au
+                    <strong> citoyen-consommateur</strong>.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ============= Comment ça marche ? (texte GAUCHE / image DROITE) ============= */}
+          <section style={styles.section}>
+            <div style={styles.row}>
+              <div style={styles.colTextLeft}>
+                <h2 style={styles.h2}>Comment ça marche&nbsp;?</h2>
+                <div style={styles.textBox}>
+                  <p style={styles.p}>
+                    <strong>Ça commence par des enchères.</strong> Des enchères communautaires d’un genre nouveau.
+                  </p>
+                  <p style={styles.p}>
+                    À l’inscription, chaque citoyen-consommateur reçoit gratuitement un <strong>badge pré-token</strong>.
+                    Lors des enchères, ce pré-token devient un <strong>Token Étika</strong>.<br />
+                    <strong>Un jeton numérique</strong> que vous vendrez collectivement auprès des futurs sponsors,
+                    secteur par secteur (banque, assurance, énergie, télécoms, VOD, etc.).
+                  </p>
+                  <p style={styles.p}>
+                    À la clôture&nbsp;:
+                    <br />— soit vous récupérez votre part,
+                    <br />— soit vous la réinvestissez dans le <strong>premier fonds de consommateurs</strong>,
+                    pour bâtir une épargne novatrice et ambitieuse.
+                  </p>
+
+                  <p style={styles.p}><strong>Plus la communauté grandit, plus les grandes entreprises se mobilisent :</strong></p>
+<ul>
+  <li>À 100&nbsp;000&nbsp;participants, elles nous observent&nbsp;;</li>
+  <li>À 500&nbsp;000&nbsp;participants, elles s’intéressent au projet&nbsp;;</li>
+  <li>À 1&nbsp;million&nbsp;de&nbsp;participants, elles commencent à nous prendre au sérieux&nbsp;;</li>
+  <li>À 2&nbsp;millions, ça devient une question existentielle&nbsp;!</li>
+</ul>
+
+                  <p style={styles.p}>
+                    L’entreprise qui apporte le plus de cash dans sa catégorie remporte l’adhésion de la communauté.
+                    Avec ce capital cumulé, nous lançons un fonds éthique de consommateurs engagés&nbsp;: militant, social,
+                    écologique et solidaire.
+                  </p>
+                </div>
+
+                <div style={styles.moreRow}>
+                  <MoreLink href={`${DOCS_BASE}/learn/how-it-works/`}>En savoir plus</MoreLink>
+                </div>
+              </div>
+
+              <div style={styles.colImgRight}>
+                {/* Préserver l’intégrité de l’image (pas rognée) + léger fondu */}
+                <div
+                  role="img"
+                  aria-label="Enchères communautaires — matérialiser la valeur collective"
+                  style={{
+                    ...styles.imgBlendBoxRightContain,
+                    backgroundImage: `
+                      linear-gradient(270deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.00) 8%),
+                      url(${imgFonctionnement})
+                    `,
+                  }}
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* ============= Avec quels outils ? (image GAUCHE / texte DROITE) ============= */}
+          <section style={styles.section}>
+            <div style={styles.row}>
+              <div style={styles.colImgLeft}>
+                <div
+                  role="img"
+                  aria-label="Mécanique collective : transparence et automatisation"
+                  style={{
+                    ...styles.imgBlendBoxLeft,
+                    backgroundImage: `
+                      linear-gradient(90deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.00) 8%),
+                      url(${imgMecanique})
+                    `,
+                  }}
+                />
+              </div>
+
+              <div style={styles.colTextRight}>
+                <h2 style={styles.h2}>Avec quels outils&nbsp;?</h2>
+                <div style={styles.textBox}>
+                  <p style={styles.p}>
+                    <strong>Étika</strong> s’appuie sur les technologies les plus fiables de notre temps :
+                    la <strong>blockchain</strong> et les <strong>smart contracts</strong>.
+                    Des règles automatiques, traçables et infalsifiables, mises au service d’un nouveau processus :
+                    <strong> rémunérer la consommation responsable</strong>.
+                  </p>
+
+                  <p style={styles.p}>
+                    Notre principe ? Une <strong>transparence totale</strong>, une <strong>automatisation continue</strong>,
+                    et un <strong>pilotage décentralisé en temps réel</strong>.
+                    Chaque transaction devient une preuve d’engagement :
+                    la <em>Proof of Purchase</em> — la validation concrète de votre participation à un modèle plus juste.
+                  </p>
+
+                  <p style={styles.p}>
+                    Dans la finance traditionnelle, le temps coûte cher : plus l’horizon est long, plus le risque augmente, plus le capital se renchérit.
+                    Nous supprimons cette inertie. Nous <strong>raccourcissons le temps</strong> pour
+                    <strong> transformer chaque acte d’achat en valeur immédiate</strong>.
+                    Nous captons, validons et réglons les échanges <strong>en temps réel</strong>.
+                    C’est ainsi que la fidélité devient <strong>épargne active</strong>, et que la valeur revient à ceux qui la créent vraiment :
+                    les citoyens-consommateurs.
+                  </p>
+
+                  <p style={styles.p}>
+                    <strong>Étika</strong>, c’est une <strong>application</strong>, une <strong>blockchain dédiée</strong>,
+                    et un <strong>Fonds de consommateurs inédit</strong> — un Fonds vivant, alimenté en continu par les flux financiers réels de vos consommations quotidiennes.
+                  </p>
+
+                  <p style={styles.p}>
+                    Contrairement aux <strong>fonds de pension traditionnels</strong>, limités par des cotisations fixes et dépendants des marchés boursiers,
+                    le <strong>Fonds de consommateurs</strong> est alimenté <strong>en permanence</strong> :
+                    chaque produit acheté, chaque service utilisé, génère un flux qui l’alimente.
+                    Et plutôt que de spéculer sur l’épargne, ce Fonds <strong>réinvestit directement</strong> dans les entreprises responsables —
+                    celles qui contribuent elles-mêmes à nourrir ce cercle vertueux. C’est la <strong>force de l’auto-alimentation</strong>.
+                  </p>
+                </div>
+
+                <div style={styles.moreRow}>
+                  <MoreLink href={`${DOCS_BASE}/learn/tech/`}>En savoir plus</MoreLink>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ============= Notre stratégie & nos valeurs (texte GAUCHE / image DROITE) ============= */}
+          <section style={styles.section}>
+            <div style={styles.row}>
+              <div style={styles.colTextLeft}>
+                <h2 style={styles.h2}>Notre stratégie &amp; nos valeurs</h2>
+                <div style={styles.textBox}>
+                  <p style={styles.p}>
+  Nous sommes convaincus que le changement passe par la consommation — chaque achat exprime une vision du monde et contribue à orienter l’économie.
+</p>
+                  <p style={styles.p}>
+  Grâce à la blockchain, nous relions directement les consommateurs et les entreprises dans un écosystème d’échanges transparent et équitable, où chaque contribution laisse une trace positive.
+</p>
+                  <p style={styles.p}>
+                    Pour y parvenir, nous <strong>court-circuitons les intermédiaires financiers</strong> afin de
+                    <strong> récupérer leurs marges</strong> et <strong>les titres de propriété</strong> associés à la valeur créée,
+                    pour <strong>financer le nouveau modèle</strong> et restituer plus de gouvernance à la communauté.
+                  </p>
+                  <p style={styles.p}>Notre modèle repose sur trois principes :</p>
+                  <ul style={styles.ul}>
+                    <li><strong>Équité d’accès</strong> : les entreprises responsables bénéficient d’un canal direct vers une communauté engagée.</li>
+                    <li><strong>Performance durable</strong> : les critères sociaux et environnementaux deviennent des leviers de compétitivité et de croissance.</li>
+                    <li><strong>Technologie de confiance</strong> : les règles sont publiques, automatiques et infalsifiables grâce à la blockchain.</li>
+                  </ul>
+
+                  <p style={styles.p}>
+                    Ensemble, nous construisons un <strong>Fonds puissant, indépendant et militant</strong>,
+                    capable de financer des projets <strong>sociaux, environnementaux et humanitaires</strong> —
+                    du soutien au développement à la reforestation, jusqu’à la dépollution des océans.
+                    Parce qu’avec <strong>Étika</strong>, <strong>chaque acte de consommation devient un acte de reconstruction collective</strong>.
+                  </p>
+                </div>
+
+                <div style={styles.moreRow}>
+                  <MoreLink href={`${DOCS_BASE}/learn/values/`}>En savoir plus</MoreLink>
+                </div>
+              </div>
+
+              <div style={styles.colImgRight}>
+                <div
+                  role="img"
+                  aria-label="Innovation et partenariats : stratégie Étika"
+                  style={{
+                    ...styles.imgBlendBoxRight,
+                    backgroundImage: `
+                      linear-gradient(270deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.00) 8%),
+                      url(${imgStrategie})
+                    `,
+                  }}
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* ============= Mobilisons-nous ! (image GAUCHE / texte DROITE) ============= */}
+          <section style={styles.section}>
+            <div style={styles.row}>
+              <div style={styles.colImgLeft}>
+                <div
+                  role="img"
+                  aria-label="Avenir durable et positif"
+                  style={{
+                    ...styles.imgBlendBoxLeft,
+                    backgroundImage: `
+                      linear-gradient(90deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.00) 8%),
+                      url(${imgAvenir})
+                    `,
+                  }}
+                />
+              </div>
+
+              <div style={styles.colTextRight}>
+                <h2 style={styles.h2}>Mobilisons-nous&nbsp;!</h2>
+                <div style={styles.textBox}>
+                  <p style={styles.p}>
+                    Étika n’est pas une idée abstraite&nbsp;: <strong>chaque badge compte</strong>. Ensemble,
+                    nous pouvons transformer notre fidélité en une force collective, créer le premier fonds éthique
+                    de consommateurs engagés et bâtir un <strong>circuit court financier auto-alimenté</strong>,
+                    éthique et solidaire.
+                  </p>
+
+                  {/* CTA (vidéo supprimée) */}
+                  <div style={styles.ctaRowNoWrap}>
+                    <a href={`${REGISTER_BASE}/register/consumer/`} style={styles.cta}>Citoyen-consommateur</a>
+                    <a href={`${REGISTER_BASE}/register/business/`} style={styles.cta}>Entreprises (PME/PMI)</a>
+                    <a href={`${REGISTER_BASE}/register/sponsor/`} style={styles.cta}>Sponsor</a>
+                    <a href={`${REGISTER_BASE}/register/crypto-investor/`} style={styles.cta}>Crypto-investisseur</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </main>
+      </div>
+    </>
+  );
+}
+
+/* -------------------- Styles -------------------- */
+
+const styles: Record<string, React.CSSProperties> = {
+  // Wrapper plein écran qui centre le conteneur
+  wrapper: { width: "100vw", display: "flex", justifyContent: "center", boxSizing: "border-box" },
+
+  // Conteneur centré avec marges identiques
+  page: { width: "100%", maxWidth: 1180, margin: "0 auto", padding: "30px 40px 80px 40px", boxSizing: "border-box" },
+
+  section: { padding: "28px 0 24px", borderBottom: "1px solid #eef2f7" },
+
+  // Grille (2 colonnes)
+  row: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "start", justifyItems: "stretch" },
+
+  // Colonnes
+  colImgLeft:  { width: "100%", textAlign: "center", display: "flex", alignItems: "flex-start", justifyContent: "center" },
+  colTextRight:{ width: "100%" },
+  colTextLeft: { width: "100%" },
+  colImgRight: { width: "100%", textAlign: "center", display: "flex", alignItems: "flex-start", justifyContent: "center" },
+
+  // Visuels fondus légers (pas de cercle, pas d’encart coloré)
+  imgBlendBoxLeft: {
+    width: "100%", height: 300, minHeight: 220, borderRadius: 14, overflow: "hidden",
+    backgroundSize: "cover", backgroundPosition: "center left", backgroundRepeat: "no-repeat",
+    boxShadow: "none", border: "none", backgroundColor: "#fff",
+  },
+  imgBlendBoxRight: {
+    width: "100%", height: 300, minHeight: 220, borderRadius: 14, overflow: "hidden",
+    backgroundSize: "cover", backgroundPosition: "center right", backgroundRepeat: "no-repeat",
+    boxShadow: "none", border: "none", backgroundColor: "#fff",
+  },
+  // Variante "contain" pour préserver 100% de l'image (maillet)
+  imgBlendBoxRightContain: {
+    width: "100%", height: 320, minHeight: 220, borderRadius: 14, overflow: "hidden",
+    backgroundSize: "cover, contain", backgroundPosition: "center right, center right", backgroundRepeat: "no-repeat, no-repeat",
+    boxShadow: "none", border: "none", backgroundColor: "#fff",
+  },
+
+  // Typo
+  h1: { fontSize: 30, margin: "0 0 10px", lineHeight: 1.25, color: "#0078D4" },
+  h2: { fontSize: 24, margin: "0 0 8px", lineHeight: 1.25, color: "#0078D4" },
+  p:  { textAlign: "justify", color: "#111827", margin: "0 0 12px", lineHeight: 1.7 },
+
+  textBox: { maxWidth: 640 },
+  ul: { marginTop: 0, marginBottom: 12, paddingLeft: 22, color: "#111827", lineHeight: 1.7 },
+
+  // Liens
+  moreRow: { display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" },
+  moreBtn: {
+    display: "inline-block", padding: "8px 12px", borderRadius: 999,
+    border: "1px solid #111827", background: "#111827", color: "#ffffff",
+    textDecoration: "none", fontWeight: 600, fontSize: 12.5, lineHeight: 1.2,
+    transition: "all 120ms ease", cursor: "pointer",
+  },
+  moreBtnHover: { background: "#0e0e0e", border: "1px solid #0b0b0b", boxShadow: "0 4px 12px rgba(0,0,0,0.25)" },
+
+  // CTA
+  ctaRowNoWrap: { display: "flex", flexWrap: "nowrap", gap: 10, marginTop: 10, overflowX: "auto" },
+  cta: {
+    display: "inline-block", whiteSpace: "nowrap", padding: "10px 16px", borderRadius: 999,
+    border: "1px solid #e5e7eb", textDecoration: "none", color: "#111827", background: "#ffffff", fontWeight: 500,
+  },
+};
+
+
+
+
+
+
+
+

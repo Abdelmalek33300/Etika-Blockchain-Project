@@ -1,0 +1,166 @@
+﻿// frontend/src/App.jsx  AppShell Mantine + libellés FR secteurs
+import { useEffect, useState } from "react";
+import AuctionsPanel from "./components/AuctionsPanel.jsx";
+
+import {
+  MantineProvider,
+  AppShell,
+  Container,
+  Group,
+  Button,
+  Text,
+  Card,
+  SimpleGrid,
+  Badge,
+  Stack,
+  Divider,
+} from "@mantine/core";
+
+// Libellés FR pour les secteurs
+const FR_SECTORS = {
+  bank: "Banque",
+  electricity: "Énergie",
+  mobile: "Téléphonie mobile",
+  search_engine: "Moteur de recherche",
+  telecom: "Télécom",
+  vod: "VOD",
+  payment_card: "Carte de paiement",
+  box_internet: "Box internet",
+  mutual: "Mutuelle",
+  insurance: "Assurance",
+};
+const labelFR = (k) => FR_SECTORS[k] ?? k;
+
+function KpiCard({ label, value, hint }) {
+  return (
+    <Card withBorder radius="md" padding="lg">
+      <Text size="sm" c="dimmed">{label}</Text>
+      <Text fw={800} fz={28}>{value}</Text>
+      {hint ? <Text size="xs" c="dimmed">{hint}</Text> : null}
+    </Card>
+  );
+}
+
+function Apercu({ dashboard }) {
+  const totalPartenairesVerifies = dashboard?.counters?.total_badges ?? 0;
+  const perSector = dashboard?.counters?.per_sector ?? {};
+  const lastUpdated = dashboard?.last_updated;
+
+  return (
+    <Container size="lg" py="md">
+      <Stack gap="md">
+        {/* Bandeau pédagogique court */}
+        <Card radius="md" padding="md" withBorder>
+          <Text fw={600}>Étika  du pré-token au token</Text>
+          <Text size="sm" c="dimmed">
+            Les participants obtiennent un <strong>badge pré-token</strong> en phase 1. Il deviendra un <strong>token</strong> plus tard, selon des conditions et un calendrier.
+          </Text>
+        </Card>
+
+        {/* KPIs (placeholders pour les vraies métriques à venir via /api/public/overview) */}
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
+          <KpiCard label="Participants (pré-token)" value="" hint="Sera branché sur /api/public/overview" />
+          <KpiCard label="Entreprises partenaires ordinaires" value="" hint="Sera branché sur /api/public/overview" />
+          <KpiCard label="Candidats sponsors (total)" value="" hint="Sera branché sur /api/public/overview" />
+          <KpiCard label="Crypto-investisseurs" value="" hint="Sera branché sur /api/public/overview" />
+        </SimpleGrid>
+
+        <Divider label="Partenaires vérifiés (donnée actuelle)" />
+
+        {/* Donnée existante et fiable aujourd'hui */}
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
+          <KpiCard label="Total vérifiés" value={totalPartenairesVerifies} hint="Somme des secteurs ci-dessous" />
+          {Object.entries(perSector).map(([k, v]) => (
+            <Card key={k} withBorder radius="md" padding="md">
+              <Group justify="space-between" mb={6}>
+                <Text>{labelFR(k)}</Text>
+                <Badge variant="light">{v}</Badge>
+              </Group>
+              <Text size="xs" c="dimmed">Partenaires vérifiés</Text>
+            </Card>
+          ))}
+        </SimpleGrid>
+
+        <Text size="xs" c="dimmed">
+          Dernière mise à jour : {lastUpdated ? new Date(lastUpdated).toLocaleString("fr-FR") : ""}
+        </Text>
+      </Stack>
+    </Container>
+  );
+}
+
+export default function App() {
+  const [page, setPage] = useState("apercu"); // "apercu" | "encheres"
+  const [dashboard, setDashboard] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let abort = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/public/dashboard", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!abort) setDashboard(json);
+      } catch (e) {
+        if (!abort) setErr(e?.message || String(e));
+      }
+    })();
+    return () => { abort = true; };
+  }, []);
+
+  return (
+    <MantineProvider theme={{ primaryColor: "teal", defaultRadius: "md" }}>
+      <AppShell header={{ height: 60 }} padding="md">
+        <AppShell.Header>
+          <Container size="lg" h="100%">
+            <Group h="100%" justify="space-between">
+              <Group gap="sm">
+                <Text fw={800}>Étika</Text>
+                <Badge variant="light">MVP</Badge>
+              </Group>
+              <Group gap="xs">
+                <Button variant={page === "apercu" ? "filled" : "subtle"} onClick={() => setPage("apercu")}>Aperçu</Button>
+                <Button variant={page === "encheres" ? "filled" : "subtle"} onClick={() => setPage("encheres")}>Enchères</Button>
+              </Group>
+            </Group>
+          </Container>
+        </AppShell.Header>
+
+        <AppShell.Main>
+          {err && (
+            <Container size="lg" mb="md">
+              <Card withBorder c="red">
+                <Text fw={600}>Erreur de chargement</Text>
+                <Text size="sm">{err}</Text>
+              </Card>
+            </Container>
+          )}
+
+          {page === "apercu" ? (
+            <Apercu dashboard={dashboard} />
+          ) : (
+            <Container size="lg" py="md">
+              <AuctionsPanel />
+            </Container>
+          )}
+        </AppShell.Main>
+
+        <AppShell.Footer>
+          <Container size="lg">
+            <Group justify="space-between" py="xs">
+              <Text size="sm" c="dimmed"> Étika  pré-token  token</Text>
+              <Group gap="xs">
+                <Text size="sm" c="dimmed">Vitrine</Text>
+                <Text size="sm" c="dimmed">Participer</Text>
+                <Text size="sm" c="dimmed">Sponsoriser</Text>
+                <Text size="sm" c="dimmed">Investir</Text>
+                <Text size="sm" c="dimmed">Communauté</Text>
+              </Group>
+            </Group>
+          </Container>
+        </AppShell.Footer>
+      </AppShell>
+    </MantineProvider>
+  );
+}

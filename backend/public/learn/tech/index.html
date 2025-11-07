@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Étika — Technologie : S’affranchir des intermédiaires </title>
+  <meta name="description" content="Blockchain, Smart Contracts et Proof of Purchase (PoP) pour supprimer les intermédiaires, sécuriser et automatiser les flux." />
+  <link rel="icon" href="/favicon.ico" />
+
+  <style>
+    :root{
+      --ink:#0f172a; --muted:#475569; --line:#e8eef6; --blue:#0b61ff; --bg:#ffffff;
+      --radius:12px; --container:1080px; --shadow:0 6px 18px rgba(2,6,23,.04); --zebra:#f9fafb;
+
+      /* Typo harmonisée (réf. Overview) */
+      --fs-base:15px; --lh-base:1.6;
+      --fs-h1-min:26px; --fs-h1-max:42px; --fs-h1-vw:4.5vw;
+      --fs-h2-min:20px; --fs-h2-max:32px; --fs-h2-vw:2.8vw;
+      --fs-h3:19px; --fs-h4:16px;
+    }
+
+    /* BASE */
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,sans-serif;
+      -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+      font-kerning:normal; font-variant-ligatures:common-ligatures contextual;
+      letter-spacing:normal; word-spacing:normal; line-height:var(--lh-base);
+    }
+    a{color:inherit; text-decoration:none;}
+    strong{font-weight:600;}
+
+    /* NAV (harmonisée Overview) */
+    .nav{
+      position:sticky; top:0; z-index:9999; background:#fff;
+      border-bottom:1px solid rgba(2,6,23,.08);
+      box-shadow:0 6px 20px rgba(2,6,23,.06);
+    }
+    .nav-inner{
+      max-width:1180px; margin:0 auto; padding:10px 16px;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .brand{font-weight:800; font-size:20px; color:var(--ink);}
+    .burger{
+      width:40px; height:36px; background:transparent; border:0;
+      display:flex; flex-direction:column; gap:6px; justify-content:center;
+    }
+    .burger span{height:2px; background:var(--blue); transition:transform .18s ease,opacity .18s ease;}
+    .burger.is-open span:nth-child(1){transform:translateY(8px) rotate(45deg);}
+    .burger.is-open span:nth-child(2){opacity:0;}
+    .burger.is-open span:nth-child(3){transform:translateY(-8px) rotate(-45deg);}
+    .menu{display:none; gap:18px; align-items:center;}
+    .menu a{font-weight:700; font-size:15px; padding:10px 12px; border-radius:10px;}
+    .menu a:hover{background:#0b61ff10; color:var(--blue);}
+    @media(min-width:980px){ .burger{display:none;} .menu{display:flex;} }
+    .menu-open{
+      display:flex; flex-direction:column; position:absolute; left:0; right:0; top:58px;
+      padding:10px 16px 14px; background:#fff;
+      border-bottom:1px solid rgba(2,6,23,.08); box-shadow:0 14px 28px rgba(2,6,23,.08);
+    }
+
+    /* CONTENU */
+    .wrap{ max-width:var(--container); margin:0 auto; padding:24px 16px 60px; }
+    .kicker{ color:var(--blue); font-weight:700; font-size:12px; letter-spacing:.05em; text-transform:uppercase; }
+
+    /* HERO */
+    .hero{ padding:24px 0 14px; border-bottom:1px solid #f1f5f9; }
+    h1{
+      margin:10px 0 8px;
+      font-size:clamp(var(--fs-h1-min), var(--fs-h1-vw), var(--fs-h1-max));
+      line-height:1.15; font-weight:800;
+      /* Anti “gruyère” global */
+      text-align:left; letter-spacing:normal; word-spacing:normal; text-justify:auto; hyphens:none;
+      text-wrap:balance; word-break:keep-all;
+    }
+    .subtitle{ margin:0; color:var(--muted); font-size:18px; }
+
+    /* TITRES (h2/h3/h4) — anti “gruyère” */
+    h2, h3, h4{
+      text-align:left; letter-spacing:normal; word-spacing:normal; text-justify:auto; hyphens:none;
+      word-break:keep-all; margin:0; font-weight:800; color:var(--ink);
+      -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    }
+    h2{
+      margin:24px 0 10px;
+      font-size:clamp(var(--fs-h2-min), var(--fs-h2-vw), var(--fs-h2-max));
+      line-height:1.25; position:relative;
+    }
+    h2.with-blue-underline::after{
+      content:""; display:block; height:3px; margin-top:6px; width:clamp(140px,26%,260px); border-radius:2px;
+      background:linear-gradient(90deg,var(--blue)0%,rgba(11,97,255,.65)55%,rgba(11,97,255,0)100%);
+    }
+    h3{ margin:16px 0 8px; font-size:var(--fs-h3); }
+    h4{ margin:12px 0 6px; font-size:var(--fs-h4); }
+
+    /* TEXTE */
+    p{ margin:12px 0; text-align:justify; }
+    .divider{ height:1px; background:var(--line); margin:16px 0; }
+
+    /* GRILLES (50/50 + quinconce) */
+    .grid{ display:flex; flex-direction:column; gap:22px; margin:40px 0 56px; }
+    .col{ flex:1 1 50%; }
+    .text{ text-align:justify; }
+    .media{ display:flex; align-items:flex-start; justify-content:center; }
+    .media img{
+      width:100%; max-width:560px; height:auto; object-fit:contain;
+      border-radius:14px; box-shadow:var(--shadow);
+      max-height:min(58vh,420px);
+    }
+    @media(min-width:992px){
+      .grid{ flex-direction:row; align-items:flex-start; gap:48px; }
+      .alt{ flex-direction:row-reverse; }
+    }
+
+    /* TABLE (si besoin) */
+    .table-wrap{ margin-top:12px; overflow-x:auto; }
+    table{
+      width:100%; border-collapse:collapse; background:#fff;
+      border:1px solid #e5e7eb; border-radius:10px; box-shadow:var(--shadow);
+      font-size:15px; line-height:1.55;
+    }
+    thead th{
+      text-align:left; padding:8px 12px; background:#f1f5f9; color:#0f172a;
+      font-weight:800; border-bottom:1px solid #e2e8f0; white-space:nowrap;
+    }
+    tbody td{
+      padding:8px 12px; border-bottom:1px solid #eef2f7; vertical-align:top; text-align:left;
+    }
+    tbody tr:nth-child(odd){ background:#f9fafb; }
+    tbody tr:last-child td{ border-bottom:none; }
+    th:first-child, td:first-child{ width:28%; font-weight:800; color:#0b61ff; }
+    @media (max-width: 520px){ th:first-child, td:first-child{ width:auto; white-space:normal; } }
+  </style>
+</head>
+<body>
+  <!-- NAV -->
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">Étika</a>
+      <button class="burger" aria-label="Menu" aria-expanded="false" aria-controls="main-menu" id="burgerBtn">
+        <span></span><span></span><span></span>
+      </button>
+      <nav id="main-menu" class="menu">
+        <a href="/overview">Accueil</a>
+        <a href="/auctions">Enchères</a>
+        <a href="/about">À propos</a>
+        <a href="/contact">Contact</a>
+        <a href="https://community.example.com" target="_blank" rel="noreferrer">Communauté</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <header class="hero">
+      <h1 class="with-blue-underline">S'affranchir des intermédiaires</h1>
+      <p class="subtitle">Fondations techniques : Blockchain, Smart Contracts et Proof of Purchase (PoP).</p>
+    </header>
+
+    <!-- SECTION 1 -->
+    <section class="grid">
+      <div class="col text">
+        <h2 class="with-blue-underline">Automatisation de la fonction finance</h2>
+
+        <h3>1. La technologie qui nous libère</h3>
+        <p>Notre modèle s’appuie sur une infrastructure conçue pour supprimer les intermédiaires financiers et garantir la sécurité des actifs. Deux piliers : la blockchain pour la sécurité et la traçabilité, et les smart contracts pour l’automatisation intégrale des flux.</p>
+
+        <div class="divider"></div>
+
+        <h4>Comprendre la blockchain : le registre infalsifiable</h4>
+        <p>La blockchain est un grand livre de compte numérique et décentralisé. Au lieu d’être stocké chez une seule banque, ce livre est copié et partagé sur des milliers de nœuds. Toute modification illégitime est rejetée par les autres copies : le registre reste transparent et infalsifiable.</p>
+
+        <h4>Comprendre le smart contract : le contrat automatisé</h4>
+        <p>Un smart contract exécute automatiquement les termes d’un accord dès qu’une condition est remplie. Avantage : pas de gestionnaire ou de notaire à mobiliser ; le code applique la règle à vitesse électronique, sans erreur et sans frais d’intermédiaire.</p>
+      </div>
+      <div class="col media">
+        <img src="./img/img-tech-1.png" alt="Schéma Blockchain et Smart Contracts" loading="lazy" decoding="async" />
+      </div>
+    </section>
+
+    <!-- SECTION 2 (ALT) -->
+    <section class="grid alt">
+      <div class="col text">
+        <h2 class="with-blue-underline">L’automatisation au service de la souveraineté</h2>
+
+        <h4>Le temps réel : notre arme de désintermédiation</h4>
+        <p>La maîtrise algorithmique du temps réel est notre stratégie pour délégitimer la finance traditionnelle et récupérer des marges cumulées disproportionnées. Dans le système financier classique, la latence (le temps entre l’engagement et le règlement) est la source principale du risque facturé. Plus le temps s’allonge, plus la facture s’alourdit.</p>
+        <p>En annulant cette latence via l’exécution immédiate du smart contract et une proposition d’affacturage en temps réel, Étika réduit fortement le risque lié au temps. On supprime ainsi l’argument central qui justifie les marges des marchés : la tarification du risque temporel.</p>
+        <ul>
+          <li>Récupérer de la valeur auparavant captée par des systèmes à forte latence ;</li>
+          <li>Financer l’épargne citoyenne tout en offrant une sécurité de trésorerie aux entreprises partenaires.</li>
+        </ul>
+        <p>Ce faisant, nous limitons la spéculation et créons un circuit de financement direct au service d’un écosystème plus solidaire, éthique et respectueux de l’environnement.</p>
+
+        <h4>Suppression des intermédiaires via les smart contracts</h4>
+        <p>Le smart contract orchestre la chaîne de valeur : activation des jetons, service d’affacturage, rémunération du capital-investissement et réinjection des intérêts — le tout à vitesse électronique, sans intervention humaine ni validation bancaire.</p>
+
+        <h4>La sécurité par la décentralisation</h4>
+        <p>La blockchain garantit la sécurité et la traçabilité : registre partagé, infalsifiable, intégrité renforcée de l’épargne et des transactions.</p>
+
+        <h4>L’autonomie de la communauté</h4>
+        <p>Les membres de la communauté peuvent héberger le système en exécutant un nœud. Chaque nœud valide le réseau : la confiance est distribuée, la souveraineté renforcée, la dépendance à un tiers supprimée.</p>
+      </div>
+      <div class="col media">
+        <img src="./img/img-tech-2.png" alt="Orchestration des flux par Smart Contract" loading="lazy" decoding="async" />
+      </div>
+    </section>
+
+    <!-- SECTION 3 -->
+    <section class="grid">
+      <div class="col text">
+        <h2 class="with-blue-underline">Proof of Purchase (PoP) : le consensus en temps réel</h2>
+
+        <p>Pour rester efficace et sobre en énergie, Étika n’utilise pas de consensus énergivore (type Proof of Work). Nous avons conçu un mécanisme adossé à l’usage réel : le Proof of Purchase (PoP).</p>
+
+        <p><strong>Triple validation algorithmique :</strong> le smart contract exige la confirmation synchronisée de trois preuves de valeur :</p>
+        <ul>
+          <li><strong>Preuve de l’usage (consommateur)</strong> : la transaction d’achat déclenche l’activation des jetons ;</li>
+          <li><strong>Preuve de la vente (commerçant)</strong> : l’encaissement confirme la réalité de l’échange ;</li>
+          <li><strong>Preuve de la liquidité (fournisseur)</strong> : le règlement du chiffre d’affaires confirme l’engagement du capital-investissement.</li>
+        </ul>
+
+        <p>L’enregistrement de ces trois actions, en temps réel et en synchronisation, déclenche la chaîne de rémunération. Cette exigence de précision garantit l’intégrité du consensus et la sécurité des actifs.</p>
+
+        <p><strong>Résultat :</strong> un système aligné sur l’économie réelle — direct, sobre et transparent — où le pouvoir de décision se convertit immédiatement en valeur financière sécurisée.</p>
+      </div>
+      <div class="col media">
+        <img src="./img/img-tech-3.png" alt="Triple validation PoP et synchronisation temps réel" loading="lazy" decoding="async" />
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Burger (identique Overview/Values)
+    (function(){
+      const burger=document.getElementById('burgerBtn');
+      const menu=document.getElementById('main-menu');
+      if(!burger || !menu) return;
+      burger.addEventListener('click',()=>{
+        const open=burger.classList.toggle('is-open');
+        burger.setAttribute('aria-expanded',open);
+        document.body.style.overflow=open?'hidden':'';
+        document.documentElement.style.overflow=open?'hidden':'';
+        menu.classList.toggle('menu-open',open);
+      });
+      menu.addEventListener('click',e=>{
+        const t=e.target;
+        if(t && t.tagName==='A'){
+          burger.classList.remove('is-open');
+          burger.setAttribute('aria-expanded','false');
+          menu.classList.remove('menu-open');
+          document.body.style.overflow='';
+          document.documentElement.style.overflow='';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

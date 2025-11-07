@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Étika — Valeurs & Stratégie</title>
+  <meta name="description" content="Valeurs & Stratégie Étika : causalité locale, nouvelle génération de fonds militants, gouvernance citoyenne et compétitivité durable." />
+  <link rel="icon" href="/favicon.ico" />
+
+  <style>
+    :root{
+      --ink:#0f172a; --muted:#475569; --line:#e8eef6; --blue:#0b61ff; --bg:#ffffff;
+      --radius:12px; --container:1080px;
+
+      /* Typo overview (référence commune) */
+      --fs-kicker:12px;
+      --fs-sub:18px;
+      --fs-h1-min:26px; --fs-h1-max:42px; --fs-h1-vw:4.5vw;
+      --fs-h2-min:20px; --fs-h2-max:32px; --fs-h2-vw:2.8vw;
+      --lh-body:1.55; --lh-title:1.15; --lh-h2:1.25;
+      --space-xxs:6px; --space-xs:8px; --space-sm:10px; --space-md:16px; --space-lg:24px; --space-xl:36px; --space-2xl:48px;
+    }
+
+    /* BASE (strictement alignée Overview) */
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--ink);
+      font-family:system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,sans-serif;
+      -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+      font-kerning:normal; font-variant-ligatures:common-ligatures contextual;
+      letter-spacing:normal; word-spacing:normal;
+      line-height:var(--lh-body);
+    }
+    a{color:inherit; text-decoration:none;}
+
+    /* NAV (harmonisée Overview) */
+    .nav{
+      position:sticky; top:0; z-index:9999; background:#fff;
+      border-bottom:1px solid rgba(2,6,23,.08);
+      box-shadow:0 6px 20px rgba(2,6,23,.06);
+    }
+    .nav-inner{
+      max-width:1180px; margin:0 auto; padding:10px 16px;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .brand{font-weight:800; font-size:20px; color:var(--ink);}
+    .burger{
+      width:40px; height:36px; background:transparent; border:0;
+      display:flex; flex-direction:column; gap:6px; justify-content:center;
+    }
+    .burger span{height:2px; background:var(--blue); transition:transform .18s ease,opacity .18s ease;}
+    .burger.is-open span:nth-child(1){transform:translateY(8px) rotate(45deg);}
+    .burger.is-open span:nth-child(2){opacity:0;}
+    .burger.is-open span:nth-child(3){transform:translateY(-8px) rotate(-45deg);}
+    .menu{display:none; gap:18px; align-items:center;}
+    .menu a{font-weight:700; font-size:15px; padding:10px 12px; border-radius:10px;}
+    .menu a:hover{background:#0b61ff10; color:var(--blue);}
+    @media(min-width:980px){ .burger{display:none;} .menu{display:flex;} }
+    .menu-open{
+      display:flex; flex-direction:column; position:absolute; left:0; right:0; top:58px;
+      padding:10px 16px 14px; background:#fff;
+      border-bottom:1px solid rgba(2,6,23,.08); box-shadow:0 14px 28px rgba(2,6,23,.08);
+    }
+
+    /* CONTENU (typo harmonisée Overview) */
+    main{max-width:var(--container); margin:0 auto; padding:var(--space-lg) 16px 60px;}
+    .kicker{
+      font-size:var(--fs-kicker); letter-spacing:.05em; text-transform:uppercase;
+      color:#6b7280; margin:0 0 var(--space-xxs);
+      font-weight:700;
+    }
+    h1{
+      margin:10px 0 var(--space-xs);
+      font-size:clamp(var(--fs-h1-min), var(--fs-h1-vw), var(--fs-h1-max));
+      line-height:var(--lh-title);
+      font-weight:800;
+    }
+    h2{
+      margin:0 0 var(--space-xs);
+      font-size:clamp(var(--fs-h2-min), var(--fs-h2-vw), var(--fs-h2-max));
+      line-height:var(--lh-h2);
+      position:relative;
+      font-weight:700;
+    }
+    .with-blue-underline::after{
+      content:""; display:block; height:3px; margin-top:var(--space-xxs); width:clamp(140px,26%,260px); border-radius:2px;
+      background:linear-gradient(90deg,var(--blue)0%,rgba(11,97,255,.65)55%,rgba(11,97,255,0)100%);
+    }
+    .subtitle{color:var(--muted); font-size:var(--fs-sub); margin:0 0 var(--space-lg);}
+    p{margin:0 0 var(--space-sm);}
+    strong{font-weight:600;} /* adoucit le gras pour matcher Overview */
+    .justify{text-align:justify;}
+    .hr{height:1px; background:var(--line); margin:var(--space-xl) 0;}
+
+    /* SECTIONS : 50/50 strict + quinconce + align-items:start */
+    .section{
+      display:grid; grid-template-columns:1fr; gap:var(--space-md); align-items:start; margin:var(--space-lg) 0;
+    }
+    .text, .media{min-width:0;}
+    .media{display:flex; justify-content:center; align-items:start;}
+    .media img{
+      width:100%; max-width:560px; height:auto; object-fit:contain;
+      border-radius:var(--radius); border:1px solid #e8e8e8;
+      max-height:min(58vh,420px);
+    }
+
+    @media(min-width:992px){
+      .section{grid-template-columns:1fr 1fr; gap:var(--space-2xl); margin:var(--space-2xl) 0;}
+      .section .text{order:1}
+      .section .media{order:2; justify-content:flex-start}
+      .section.reverse .media{order:1; justify-content:flex-end}
+      .section.reverse .text{order:2}
+    }
+
+    .gap-xxl{height:96px;}
+    @media(min-width:992px){.gap-xxl{height:140px;}}
+  </style>
+</head>
+<body>
+  <!-- NAV -->
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">Étika</a>
+      <button class="burger" aria-label="Menu" aria-expanded="false" aria-controls="main-menu" id="burgerBtn">
+        <span></span><span></span><span></span>
+      </button>
+      <nav id="main-menu" class="menu">
+        <a href="/overview">Accueil</a>
+        <a href="/auctions">Enchères</a>
+        <a href="/about">À propos</a>
+        <a href="/contact">Contact</a>
+        <a href="https://community.example.com" target="_blank" rel="noreferrer">Communauté</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="kicker">Valeurs & Stratégie</div>
+    <h1 class="with-blue-underline">L’ADN Anti-Délocalisation</h1>
+    <p class="subtitle">
+      Étika repense le lien entre économie, technologie et responsabilité.
+      Chaque transaction devient une preuve d’engagement : elle valorise ceux qui produisent, consomment et financent de manière responsable.
+    </p>
+
+    <div class="hr"></div>
+
+    <!-- 1) TEXTE + IMAGE -->
+    <section class="section">
+      <div class="text">
+        <h2 class="with-blue-underline">1. Un nouveau contrat social</h2>
+        <p class="justify">En liant la destinée du Fonds de consommateurs à la consommation responsable, nous créons une obligation structurelle inédite : l’investissement doit sécuriser le revenu du consommateur pour garantir la sécurité du Fonds.</p>
+        <p class="justify">Nous avons imaginé un nouveau contrat social entre le citoyen consommateur et l’entreprise. Cette alliance nous libérera de l’industrie financière traditionnelle et poursuivra un double objectif : rémunérer la consommation engagée et financer l’économie locale dans un circuit court.</p>
+        <p class="justify"><strong>Principe de base : Sans revenu local, pas de consommation locale ; sans consommation locale, pas de Fonds des consommateurs.</strong></p>
+      </div>
+      <div class="media">
+        <img src="./img/values-causalite.png" alt="Causalité locale — revenus, consommation, Fonds des consommateurs" loading="lazy" decoding="async">
+      </div>
+    </section>
+
+    <div class="hr"></div>
+
+    <!-- 2) IMAGE + TEXTE (quinconce) -->
+    <section class="section reverse">
+      <div class="media">
+        <img src="./img/values-finance.png" alt="Finance toxique vs modèle Étika — double flux vertueux" loading="lazy" decoding="async">
+      </div>
+      <div class="text">
+        <h2 class="with-blue-underline">2. Une nouvelle génération de Fonds militants</h2>
+        <p class="justify">La finance traditionnelle (fonds de pension, fonds souverains, fonds institutionnels liés à la santé ou à la prévoyance) est entraînée dans une course au rendement forcée. Face au déséquilibre croissant entre actifs et inactifs, entre cotisants et pensionnaires, ces fonds poussent les industriels à réduire leurs coûts au détriment du social et de l’écologie.</p>
+        <p class="justify">Leur action contribue à détruire l’emploi local et prépare une bombe à retardement qui ne met pas uniquement en danger l’avenir de leurs adhérents, mais celui de toutes les sociétés dites modernes.</p>
+        <p class="justify">Notre proposition de valeur casse cet engrenage : nous bâtissons une logique où la masse salariale n’est plus une charge à minimiser ou à éliminer, mais au contraire une force motrice inestimable, capable d’entretenir un circuit auto-alimenté. En connectant directement la consommation à l’épargne et à l’investissement, de manière automatisée, désintermédiée et décentralisée, nous changeons de cap pour un écosystème plus juste, plus éthique, plus écologique — et plus performant.</p>
+      </div>
+    </section>
+
+    <div class="hr"></div>
+
+    <!-- 3) TEXTE + IMAGE -->
+    <section class="section">
+      <div class="text">
+        <h2 class="with-blue-underline">3. S'inviter dans l'autre démocratie</h2>
+        <p class="justify">Étika court-circuite les intermédiaires financiers pour récupérer leurs marges et les titres de propriété associés à la valeur créée. Résultat : la communauté gagne en gouvernance et en efficience.</p>
+        <p class="justify">À partir de nos enchères multisectorielles initiales, nous sélectionnons nos sponsors officiels pour bâtir les premières briques d’un écosystème diversifié. L’objectif : prendre une participation suffisamment significative dans leur capital. Nous voulons préparer notre ticket d'entrée pour l'autre démocratie, celle des conseils d'administration. Là où tout se décide.</p>
+        <p class="justify">Cette stratégie vise à instaurer une gouvernance citoyenne et à capter les richesses pour financer en continu l’épargne des consommateurs. Le financement de ces participations est adossé à la consommation, rendant l’investissement plus prévisible, stable et régulier.</p>
+        <p class="justify">En atteignant ce niveau d’influence, nous pourrons diffuser nos pratiques à grande échelle et connecter différents écosystèmes afin de former un tout diversifié et décentralisé.</p>
+      </div>
+      <div class="media">
+        <img src="./img/actionnaire.png" alt="Gouvernance citoyenne et contrôle actionnarial" loading="lazy" decoding="async">
+      </div>
+    </section>
+
+    <div class="gap-xxl" aria-hidden="true"></div>
+  </main>
+
+  <script>
+    // Burger (identique Overview)
+    (function(){
+      const burger=document.getElementById('burgerBtn');
+      const menu=document.getElementById('main-menu');
+      burger.addEventListener('click',()=>{
+        const open=burger.classList.toggle('is-open');
+        burger.setAttribute('aria-expanded',open);
+        document.body.style.overflow=open?'hidden':'';
+        document.documentElement.style.overflow=open?'hidden':'';
+        menu.classList.toggle('menu-open',open);
+      });
+      menu.addEventListener('click',e=>{
+        if(e.target.tagName==='A'){
+          burger.classList.remove('is-open');
+          burger.setAttribute('aria-expanded','false');
+          menu.classList.remove('menu-open');
+          document.body.style.overflow='';
+          document.documentElement.style.overflow='';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

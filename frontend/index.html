@@ -1,13 +1,24 @@
+<!-- frontend/index.html -->
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Étika</title>
+    <meta name="description" content="Étika — plateforme événementielle & écosystème" />
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      /* AUCUN lien fantôme en haut à gauche :
+         on garde une page propre et on laisse React gérer la navbar */
+      html, body { margin:0; padding:0; min-height:100%; background:#fff; }
+      #root { isolation:isolate; }
+    </style>
   </head>
   <body>
+    <!-- Point d’ancrage React -->
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+
+    <!-- Démarrage Vite/React -->
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

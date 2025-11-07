@@ -1,0 +1,332 @@
+// frontend/src/components/AuctionsPanel.tsx
+import { useEffect, useMemo, useState } from "react";
+import {
+  Card,
+  Group,
+  Text,
+  Title,
+  SimpleGrid,
+  Loader,
+  Center,
+  Badge,
+  Stack,
+  Table,
+  Select,
+  SegmentedControl,
+  Divider,
+  Alert,
+} from "@mantine/core";
+
+type AuctionStatus = "PREPARED" | "OPEN" | "CLOSED";
+interface Auction {
+  id?: string;
+  title: string;
+  sector: string;
+  status: AuctionStatus;
+  ends_at?: string | null;
+  duration_days?: number | null;
+  offers: number;
+  top_amount_cents: number | null;
+}
+interface OverviewWindow {
+  status: "PREPARED" | "OPEN" | "CLOSED";
+  opens_at: string | null;
+  closes_at: string | null;
+}
+interface OverviewResponse {
+  kpi: any;
+  seuil: { target: number; percent?: number; reached: boolean };
+  window?: OverviewWindow;
+  encheres: Auction[];
+  last_updated: string;
+}
+
+function abortableFetch(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(id));
+}
+function centsToEuro(cents: number | null | undefined) {
+  if (cents == null) return "—";
+  const euros = cents / 100;
+  return euros.toLocaleString("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+}
+function statusColor(s: AuctionStatus) {
+  switch (s) {
+    case "OPEN": return "green";
+    case "PREPARED": return "yellow";
+    case "CLOSED": return "gray";
+    default: return "gray";
+  }
+}
+function formatCountdown(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return { days, hours: pad(hours), minutes: pad(minutes), seconds: pad(seconds) };
+}
+
+const sectorLabels: Record<string, string> = {
+  electricity: "Électricité",
+  mobile: "Téléphonie mobile",
+  vod: "Vidéo à la demande",
+  telecom: "Télécoms",
+  bank: "Banque",
+  insurance: "Assurance",
+  search_engine: "Moteur de recherche",
+};
+
+function AuctionCard({ a, windowBlock }: { a: Auction; windowBlock?: OverviewWindow }) {
+  const [flipped, setFlipped] = useState(false);
+
+  const sameAsGlobal =
+    windowBlock?.status === "OPEN" &&
+    !!windowBlock.closes_at &&
+    !!a.ends_at &&
+    new Date(a.ends_at).toISOString() === new Date(windowBlock.closes_at).toISOString();
+  const showEndDate = !sameAsGlobal;
+
+  // 🔧 Cartes FLUIDES et CARRÉES : on laisse la grille décider la largeur,
+  // et on force le ratio 1/1. Plus de width fixe -> plus de chevauchement.
+  const cardOuter: React.CSSProperties = {
+    aspectRatio: "1 / 1",
+    width: "100%",
+    overflow: "hidden",
+  };
+  const wrapper: React.CSSProperties = {
+    position: "relative",
+    width: "100%",
+    height: "100%",
+    transformStyle: "preserve-3d",
+    transition: "transform 0.6s",
+    transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+  };
+  const faceBase: React.CSSProperties = {
+    position: "absolute",
+    inset: 0,
+    backfaceVisibility: "hidden",
+    WebkitBackfaceVisibility: "hidden",
+    display: "flex",
+    background: "#fff", // évite le “voir à travers”
+  };
+  const front: React.CSSProperties = { ...faceBase, transform: "rotateY(0deg)" };
+  const back:  React.CSSProperties = { ...faceBase, transform: "rotateY(180deg)" };
+  const content: React.CSSProperties = { width: "100%", padding: 10, overflowY: "auto" };
+
+  return (
+    <Card radius="lg" shadow="sm" padding="sm" withBorder onClick={() => setFlipped((v) => !v)} style={cardOuter}>
+      <div style={wrapper}>
+        {/* Recto */}
+        <div style={front}>
+          <Stack gap="xs" style={content}>
+            <Group justify="space-between" align="center">
+              <Title order={4}>{a.title}</Title>
+              <Badge color={statusColor(a.status)} variant={a.status === "OPEN" ? "filled" : "light"}>
+                {a.status}
+              </Badge>
+            </Group>
+
+            <Badge variant="light">{sectorLabels[a.sector] ?? a.sector}</Badge>
+
+            {showEndDate ? (
+              <>
+                <Text size="sm" c="dimmed">
+                  Se termine le {a.ends_at ? new Date(a.ends_at).toLocaleString("fr-FR") : "—"}
+                </Text>
+                <Divider my={4} />
+              </>
+            ) : (
+              <Divider my={4} />
+            )}
+
+            <Group justify="space-between">
+              <Stack gap={0}>
+                <Text size="sm" c="dimmed"># Offres</Text>
+                <Title order={4}>{a.offers ?? 0}</Title>
+              </Stack>
+              <Stack gap={0} ta="right">
+                <Text size="sm" c="dimmed">Meilleure offre</Text>
+                <Title order={4}>{centsToEuro(a.top_amount_cents)}</Title>
+              </Stack>
+            </Group>
+
+            <Text size="xs" c="dimmed" ta="center">(Cliquer pour voir les compétiteurs)</Text>
+          </Stack>
+        </div>
+
+        {/* Verso */}
+        <div style={back}>
+          <Stack gap="xs" style={content}>
+            <Title order={6}>Compétiteurs</Title>
+            {a.offers === 0 ? (
+              <Text c="dimmed">Aucune offre pour le moment.</Text>
+            ) : (
+              <Table striped withRowBorders={false} highlightOnHover>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>#</Table.Th>
+                    <Table.Th>Offrant</Table.Th>
+                    <Table.Th>Montant</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {Array.from({ length: Math.min(a.offers ?? 0, 6) }).map((_, i) => {
+                    const rank = i + 1;
+                    const base = a.top_amount_cents ?? 0;
+                    const amount = Math.max(5000, base - rank * 10000);
+                    return (
+                      <Table.Tr key={rank}>
+                        <Table.Td>{rank}</Table.Td>
+                        <Table.Td>{`Entreprise ${String.fromCharCode(64 + rank)}`}</Table.Td>
+                        <Table.Td>{centsToEuro(amount)}</Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
+                </Table.Tbody>
+              </Table>
+            )}
+            <Text size="xs" c="dimmed" ta="center">(Cliquer pour revenir)</Text>
+          </Stack>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+export default function AuctionsPanel() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [auctions, setAuctions] = useState<Auction[]>([]);
+  const [windowBlock, setWindowBlock] = useState<OverviewWindow | undefined>(undefined);
+
+  const [sectorFilter, setSectorFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<AuctionStatus | "ALL">("ALL");
+
+  const [now, setNow] = useState<number>(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        const res = await abortableFetch("/api/public/overview", { headers: { Accept: "application/json" } });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(`GET /api/public/overview ${res.status} ${res.statusText} ${txt}`);
+        }
+        const json = (await res.json()) as OverviewResponse;
+        if (mounted) {
+          setAuctions(json.encheres ?? []);
+          setWindowBlock(json.window);
+          setError(null);
+        }
+      } catch (e: any) {
+        if (mounted) setError(e?.message ?? "Erreur inconnue");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const sectors = useMemo(() => {
+    const set = new Set<string>();
+    auctions.forEach((a) => a.sector && set.add(a.sector));
+    return Array.from(set).sort();
+  }, [auctions]);
+
+  const filtered = useMemo(() => {
+    let list = auctions.slice();
+    if (sectorFilter) list = list.filter((a) => a.sector === sectorFilter);
+    if (statusFilter !== "ALL") list = list.filter((a) => a.status === statusFilter);
+    const rank: Record<AuctionStatus, number> = { OPEN: 0, PREPARED: 1, CLOSED: 2 };
+    list.sort((a, b) => {
+      const r = rank[a.status] - rank[b.status];
+      if (r !== 0) return r;
+      const ta = a.top_amount_cents ?? -1;
+      const tb = b.top_amount_cents ?? -1;
+      return tb - ta;
+    });
+    return list;
+  }, [auctions, sectorFilter, statusFilter]);
+
+  let countdownText: string | null = null;
+  if (windowBlock?.status === "OPEN" && windowBlock.closes_at) {
+    const closes = new Date(windowBlock.closes_at).getTime();
+    const diff = closes - now;
+    const { days, hours, minutes, seconds } = formatCountdown(diff);
+    countdownText = `Clôture globale dans ${days}j ${hours}h ${minutes}m ${seconds}s (le ${new Date(
+      closes
+    ).toLocaleString("fr-FR")})`;
+  }
+
+  // 5 colonnes max, avec vrai "gap" (spacing) entre cartes
+  const columns = Math.max(1, Math.min(5, filtered.length || 1));
+  const breakpoints = [
+    { maxWidth: "lg", cols: Math.min(4, columns) },
+    { maxWidth: "md", cols: Math.min(3, columns) },
+    { maxWidth: "sm", cols: Math.min(2, columns) },
+    { maxWidth: "xs", cols: 1 },
+  ];
+
+  if (loading) return <Center h={220}><Loader /></Center>;
+  if (error) return <Center h={220}><Text c="red">Échec du chargement : {error}</Text></Center>;
+
+  return (
+    <Stack gap="lg" style={{ maxWidth: 1600, margin: "0 auto" }}>
+      <Group justify="space-between" align="center">
+        <Title order={2}>Salle des enchères</Title>
+        <Group>
+          <Select
+            data={[{ label: "Tous secteurs", value: "" }, ...sectors.map((s) => ({ label: sectorLabels[s] ?? s, value: s }))]}
+            value={sectorFilter ?? ""}
+            onChange={(v) => setSectorFilter(v || null)}
+            placeholder="Filtrer par secteur"
+            clearable
+            w={260}
+          />
+          <SegmentedControl
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v as any)}
+            data={[
+              { label: "Tous statuts", value: "ALL" },
+              { label: "Ouverts", value: "OPEN" },
+              { label: "Préparés", value: "PREPARED" },
+              { label: "Clôturés", value: "CLOSED" },
+            ]}
+          />
+        </Group>
+      </Group>
+
+      {windowBlock?.status === "PREPARED" && (
+        <Alert variant="light" color="gray" title="En attente — seuil 100 000">
+          Les enchères s’ouvriront dès que le seuil global sera atteint.
+        </Alert>
+      )}
+      {windowBlock?.status === "OPEN" && countdownText && (
+        <Alert variant="light" color="green" title="Fenêtre globale d’enchères — Ouverte">
+          {countdownText}
+        </Alert>
+      )}
+      {windowBlock?.status === "CLOSED" && (
+        <Alert variant="light" color="gray" title="Fenêtre globale d’enchères — Clôturée">
+          Les enchères synchronisées sont terminées.
+        </Alert>
+      )}
+
+      {/* spacing="xl" => vrai espace entre cartes ; justify="center" pour un rendu propre */}
+      <SimpleGrid cols={columns} breakpoints={breakpoints} spacing="xl" justify="center">
+        {filtered.map((a) => (
+          <AuctionCard key={`${a.id ?? a.title}-${a.sector}`} a={a} windowBlock={windowBlock} />
+        ))}
+      </SimpleGrid>
+    </Stack>
+  );
+}

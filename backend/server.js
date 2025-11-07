@@ -1,110 +1,132 @@
-﻿// server.js — ESM, HTTPS, CORS, Helmet, rate-limit
+﻿// backend/server.js (version unifiée PFX/PEM + compat .env)
+// ESM
+import "dotenv/config";
+import fs from "fs";
+import path from "path";
+import https from "https";
+import http from "http";
+import express from "express";
+import cors from "cors";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 
-import express from 'express';
-import https from 'node:https';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import dotenv from 'dotenv';
-import helmet from 'helmet';
-import cors from 'cors';
-import rateLimit from 'express-rate-limit';
-
-// Routes (CJS acceptées via default import)
-import authRouter from './routes/auth.js';
-import adminAuctionsRouter from './routes/auctions-admin-router.js';
-import aliasBidsRouter from './routes/auctions-bids-alias.js';
-
-// PostgreSQL router
-import pgRouter from './routes/pg-router.mjs';
-
-// Routers publics
-import publicDashboardRouter from './routes/publicDashboardRouter.mjs';
-import badgesRouter from './routes/badgesRouter.mjs';
-
-// (optionnel) Admin badges si présent
-import adminBadgesRouter from './routes/admin-badges-router.mjs';
-import publicAuctionsRouter from './routes/public-auctions-router.js';
-
-// --- Init app & env
-const app = express();
-
+// ---------------- Path helpers ----------------
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.join(__dirname, '.env') });
+const __dirname  = dirname(__filename);
+const rel = (...p) => path.join(__dirname, ...p);
 
-// --- Sécurité + JSON
-app.use(helmet());
-app.use(express.json({ limit: '1mb' }));
-
-// --- CORS (autoriser Vite en dev)
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
-
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // outils locaux (curl, node probe, etc.)
-      if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error('Not allowed by CORS'), false);
-    },
-    credentials: true,
-  })
+// ---------------- Env helpers (compat) ----------------
+// Ports (accepte HTTPS_PORT ou PORT_HTTPS ; HTTP_PORT ou PORT_HTTP)
+const HTTPS_PORT = Number(
+  process.env.HTTPS_PORT ??
+  process.env.PORT_HTTPS ??
+  4443
+);
+const HTTP_PORT = Number(
+  process.env.HTTP_PORT ??
+  process.env.PORT_HTTP ??
+  4000
 );
 
-// --- Healthcheck
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, env: process.env.NODE_ENV || 'development' });
-});
+// PFX (accepte TLS_PFX_PATH/PFX_PATH + TLS_PFX_PASSPHRASE/PFX_PASSPHRASE)
+const PFX_PATH = process.env.TLS_PFX_PATH ?? process.env.PFX_PATH ?? rel("certs", "localhost.pfx");
+const PFX_PASSPHRASE = process.env.TLS_PFX_PASSPHRASE ?? process.env.PFX_PASSPHRASE ?? "";
 
-// --- Routes publiques (après CORS)
-app.use(publicDashboardRouter); // GET /api/public/dashboard (anti-cache + last_updated live)
-//
-app.use(publicAuctionsRouter); // GET /api/public/auctions/:id/bids (public, no auth)
-// --- PUBLIC: liste des compétiteurs pour une enchère (MVP: stub vide, prêt à brancher DB) ---
-app.get("/api/public/auctions/:id/bids", (req, res, next) => next()); // disabled inline stub  use router
-app.use(badgesRouter);          // POST /api/badges/request, POST /api/badges/verify
+// PEM (accepte TLS_CERT_PATH/CERT_PATH + TLS_KEY_PATH/KEY_PATH)
+const CERT_PATH = process.env.TLS_CERT_PATH ?? process.env.CERT_PATH ?? rel("certs", "localhost.pem");
+const KEY_PATH  = process.env.TLS_KEY_PATH  ?? process.env.KEY_PATH  ?? rel("certs", "localhost-key.pem");
 
-// --- Anti-bruteforce sur login
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api/auth/login', loginLimiter);
+// CORS (liste CSV ou “*”)
+const RAW_ORIGINS = process.env.ALLOWED_ORIGINS ?? "*";
+const ORIGINS = RAW_ORIGINS === "*"
+  ? true
+  : RAW_ORIGINS.split(",").map(s => s.trim()).filter(Boolean);
 
-// --- Auth & admin
-app.use(authRouter);
-app.use('/api/admin/auctions', adminAuctionsRouter);
+// ---------------- App ----------------
+const app = express();
+app.use(cors({ origin: ORIGINS, credentials: true }));
+app.use(express.json({ limit: "1mb" }));
 
-// --- Aliases enchères (si utilisé)
-app.use(aliasBidsRouter);
+// Healthcheck
+app.get("/healthz", (_req, res) => res.json({ ok: true }));
 
-// --- PostgreSQL (si activé)
-app.use(pgRouter);
+// Routes Étika
+import etikaRouter from "./etika-router.js";
+app.use("/api", etikaRouter);
 
-// --- Admin badges (si présent)
-app.use(adminBadgesRouter);
-
-// --- HTTPS dev server (certs locaux)
-const options = {
-  key: fs.readFileSync(path.join(__dirname, 'certs', 'localhost-key.pem')),
-  cert: fs.readFileSync(path.join(__dirname, 'certs', 'localhost.pem')),
-};
-
-const PORT = 4443;
-https.createServer(options, app).listen(PORT, () => {
-  console.log(`HTTPS dev: https://localhost:${PORT}`);
-});
-//
-// --- PUBLIC: liste des compétiteurs pour une enchère (MVP: stub vide, prêt à brancher DB) ---
-try {
-  if (typeof app?.get === "function") {
-app.get("/api/public/auctions/:id/bids", (req, res, next) => next()); // disabled inline stub  use router
-
-  }
-} catch (e) {
+// ---------------- HTTPS helpers ----------------
+function existsNonEmpty(p) {
+  try {
+    const st = fs.statSync(p);
+    return st.isFile() && st.size > 0;
+  } catch { return false; }
 }
+
+function startHttpsWithPfx() {
+  if (!existsNonEmpty(PFX_PATH)) {
+    console.warn(`[HTTPS:PFX] Fichier introuvable ou vide: ${PFX_PATH}`);
+    return null;
+  }
+  try {
+    const pfx = fs.readFileSync(PFX_PATH);
+    const httpsServer = https.createServer(
+      { pfx, passphrase: PFX_PASSPHRASE, requestCert: false, rejectUnauthorized: false },
+      app
+    );
+    httpsServer.listen(HTTPS_PORT, () => {
+      console.log(`HTTPS (PFX) prêt : https://localhost:${HTTPS_PORT}`);
+      console.log(`PFX utilisé : ${PFX_PATH}`);
+    });
+    return httpsServer;
+  } catch (err) {
+    console.error("[HTTPS:PFX] Échec :", err?.message || err);
+    return null;
+  }
+}
+
+function startHttpsWithPem() {
+  if (!existsNonEmpty(CERT_PATH) || !existsNonEmpty(KEY_PATH)) {
+    console.warn(`[HTTPS:PEM] CERT/KEY introuvables ou vides: cert=${CERT_PATH} key=${KEY_PATH}`);
+    return null;
+  }
+  try {
+    const key  = fs.readFileSync(KEY_PATH);
+    const cert = fs.readFileSync(CERT_PATH);
+    const httpsServer = https.createServer(
+      { key, cert, requestCert: false, rejectUnauthorized: false },
+      app
+    );
+    httpsServer.listen(HTTPS_PORT, () => {
+      console.log(`HTTPS (PEM) prêt : https://localhost:${HTTPS_PORT}`);
+      console.log(`CERT utilisé : ${CERT_PATH}`);
+      console.log(`KEY  utilisé : ${KEY_PATH}`);
+    });
+    return httpsServer;
+  } catch (err) {
+    console.error("[HTTPS:PEM] Échec :", err?.message || err);
+    return null;
+  }
+}
+
+function startHttp() {
+  const httpServer = http.createServer(app);
+  httpServer.listen(HTTP_PORT, () => {
+    console.log(`HTTP dev (fallback) : http://localhost:${HTTP_PORT}`);
+  });
+  return httpServer;
+}
+
+// ---------------- Boot sequence ----------------
+let httpsServer = startHttpsWithPfx();
+if (!httpsServer) {
+  httpsServer = startHttpsWithPem();
+}
+const httpServer = startHttp(); // on garde l’HTTP dev actif en parallèle pour le debug
+
+// ---------------- Robustesse ----------------
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err);
+});

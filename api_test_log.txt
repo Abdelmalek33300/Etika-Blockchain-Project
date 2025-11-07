@@ -1,0 +1,2 @@
+﻿ECHEC 4443 -> La connexion sous-jacente a été fermée : Une erreur inattendue s'est produite lors de l'envoi.
+ECHEC 4000 -> Le serveur distant a retourné une erreur : (404) Introuvable.

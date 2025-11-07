@@ -1,0 +1,57 @@
+SCAN ÉTIKA - 20251026-1024
+
+=== PAGES STATIQUES HTML (backend\public) ===
+Total: 12
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\admin\index.html
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\learn\get-started\index.html
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\learn\how-it-works\index.html
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\learn\strategy\index.html
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\learn\tech\index.html
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\learn\values\index.html
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\learn\what-you-gain\index.html
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\register\business\index.html
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\register\consumer\index.html
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\register\crypto-investor\index.html
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\register\sponsor\index.html
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\backend\public\sponsors\index.html
+
+
+=== PAGES REACT (frontend\src\pages) ===
+Total: 0
+
+
+=== FICHIERS TYPE PAGE (*Page*.tsx dans frontend\src) ===
+Total: 1
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\frontend\src\components\auctions\AuctionSectorPage.tsx
+
+
+=== ROUTES DÉTECTÉES (path: ou <Route path=) ===
+Aucune route détectée avec ce motif.
+
+
+=== RÉCAP ===
+
+HTML_statics React_pages Page_like_TSX Route_lines
+------------ ----------- ------------- -----------
+          12           0             1           0
+
+
+=== ROUTES (TS+TSX) — recherche étendue ===
+Total lignes avec motifs de routes (ts+tsx) : 0
+
+--- Références à '/overview' ---
+Total références: 5
+
+Path                                                                                                                Line
+                                                                                                                    Numb
+                                                                                                                      er
+----                                                                                                                ----
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\frontend\src\api\public.ts                      10
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\frontend\src\api\public.ts                      15
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\frontend\src\components\AuctionsPanel.tsx.bak  219
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\frontend\src\components\AuctionsPanel.tsx.bak  222
+C:\Users\joulz\etika-cleanup-20250902-213838\Etika-Blockchain-Project\frontend\src\components\OverviewPanel.tsx       36
+
+
+
+
